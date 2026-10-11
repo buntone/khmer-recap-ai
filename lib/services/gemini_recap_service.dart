@@ -28,11 +28,10 @@ class GeminiRecapService {
     final bytes = await file.readAsBytes();
 
     final candidateModels = [
-      'gemini-1.5-flash-latest',
       'gemini-2.0-flash',
+      'gemini-2.0-flash-lite',
       'gemini-1.5-flash',
-      'gemini-1.5-pro-latest',
-      'gemini-1.5-pro',
+      'gemini-1.5-flash-8b',
     ];
 
     final durationMinutes = (videoDurationSeconds / 60).toStringAsFixed(1);
@@ -47,18 +46,22 @@ class GeminiRecapService {
    - ប្រើពាក្យពេចន៍ទាក់ទាញ ដូចជាអ្នកសម្រាយរឿងកំពូលៗលើ TikTok និង YouTube (ឧទាហរណ៍៖ "សូមស្វាគមន៍មកកាន់ការសម្រាយរឿង...", "កាលពីដើមឡើយ...", "ស្រាប់តែពេលនោះ...", "រឿងរ៉ាវកាន់តែរន្ធត់នៅពេលដែល...")។
    - ហាមប្រើពាក្យបកប្រែពាក្យទល់ពាក្យ (Literal Translation) ដែលធ្វើឲ្យឆ្គង ឬស្តាប់ទៅដូចម៉ាស៊ីន។
 
-2. **រយៈពេល និងចង្វាក់ (Pacing & Duration)**:
+2. **ការបែងចែកសំឡេងតួអង្គ (Male & Female Dialogue Voice Switching)**:
+   - នៅពេលមានការសន្ទនាក្នុងរឿង ឬអ្នករៀបរាប់និយាយ ត្រូវដាក់ស្លាក (Tag) នៅដើមបន្ទាត់នីមួយៗឲ្យច្បាស់៖
+     * ប្រើ `[ប្រុស]: ` សម្រាប់អ្នករៀបរាប់ (Narrator) និងតួអង្គប្រុសនិយាយ។
+     * ប្រើ `[ស្រី]: ` សម្រាប់តួអង្គស្រីនិយាយ។
+   - ឧទាហរណ៍៖
+     [ប្រុស]: កាលពីដើមឡើយ នៅភូមិតូចមួយមានបុរសម្នាក់...
+     [ស្រី]: បងកុំទៅចោលខ្ញុំអី ទីនោះគ្រោះថ្នាក់ណាស់!
+     [ប្រុស]: ឮដូច្នេះ បុរសនោះក៏ញញឹមហើយតបវិញថា...
+
+3. **រយៈពេល និងចង្វាក់ (Pacing & Duration)**:
    - វីដេអូនេះមានប្រវែងប្រហែល $durationMinutes នាទី ($videoDurationSeconds វិនាទី)។
    - ចំនួនពាក្យ និងប្រយោគត្រូវតែល្មមសមរម្យសម្រាប់អានក្នុងរយៈពេលនេះ (ល្បឿនអានជាមធ្យម ១២០-១៤០ ពាក្យក្នុងមួយនាទី)។
 
-3. **រចនាសម្ព័ន្ធអត្ថបទ (Structure)**:
-   - ផ្ដើមរឿងទាក់ទាញ (Hooking Intro)
-   - សាច់រឿងចម្បង និងចំណុចកំពូល (Climax & Conflicts)
-   - បញ្ចប់រឿងដោយគំនិតអប់រំ ឬសំណួរបើកចំហ (Ending & Wrap-up)
-
 4. **ទម្រង់លទ្ធផល (Output Format)**:
-   - ផ្ដល់ត្រឹមតែអត្ថបទសំឡេងសម្រាយ (Narration text) សុទ្ធសាធជាភាសាខ្មែរ។
-   - កុំដាក់ចំណងជើង "Intro:", "Scene 1:" ឬ Markdown Headers ដូចជា ###, **, [], () ព្រោះអត្ថបទនេះនឹងត្រូវបញ្ជូនទៅម៉ាស៊ីនអានសំឡេង Khmer TTS ផ្ទាល់។
+   - ផ្ដល់ត្រឹមតែអត្ថបទសំឡេងសម្រាយជាភាសាខ្មែរ ដោយមានស្លាក [ប្រុស]: ឬ [ស្រី]: នៅដើមបន្ទាត់។
+   - កុំដាក់ចំណងជើង "Intro:", "Scene 1:" ឬ Markdown Headers ដូចជា ###, **, () ព្រោះអត្ថបទនេះនឹងត្រូវបញ្ជូនទៅម៉ាស៊ីនអានសំឡេង Khmer TTS ផ្ទាល់។
 ''';
 
     final content = [
@@ -96,20 +99,20 @@ class GeminiRecapService {
     }
 
     if (script.isEmpty) {
-      throw lastException ?? Exception('Gemini មិនអាចបង្កើតអត្ថបទសម្រាយរឿងបានទេ។ សូមសាកល្បងម្ដងទៀត។');
+      throw lastException ?? Exception('Gemini មិនអាចបង្កើតអត្ថបទសម្រាយរឿងបានទេ។ សូមពិនិត្យ API Key ឬសាកល្បងម្ដងទៀត។');
     }
 
-    // Clean up any remaining formatting tags so TTS reads cleanly
+    // Clean up any remaining formatting tags while preserving [ប្រុស]: and [ស្រី]:
     return _sanitizeScriptForTts(script);
   }
 
-  /// Removes timestamps, brackets, stage directions like [សើច], and markdown symbols
+  /// Removes markdown symbols, while preserving [ប្រុស]: and [ស្រី]: speaker indicators
   String _sanitizeScriptForTts(String rawText) {
     var cleaned = rawText
-        .replaceAll(RegExp(r'\[.*?\]'), '')
+        .replaceAll(RegExp(r'\[(?!(ប្រុស|ស្រី)\]).*?\]'), '') // remove brackets except [ប្រុស] / [ស្រី]
         .replaceAll(RegExp(r'\(.*?\)'), '')
         .replaceAll(RegExp(r'[*#_~`]'), '')
-        .replaceAll(RegExp(r'^(Intro|Scene \d+|Outro|Hook|Narrator):\s*', multiLine: true), '')
+        .replaceAll(RegExp(r'^(Intro|Scene \d+|Outro|Hook):\s*', multiLine: true), '')
         .replaceAll(RegExp(r'\n{3,}'), '\n\n')
         .trim();
     return cleaned;

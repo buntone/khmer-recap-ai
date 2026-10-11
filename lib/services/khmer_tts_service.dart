@@ -4,13 +4,16 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 enum KhmerVoice {
-  prasith, // Male Voice
-  sreymom, // Female Voice
+  autoDialogue, // Auto switch male/female dialogue
+  prasith,      // Male Voice
+  sreymom,      // Female Voice
 }
 
 extension KhmerVoiceExtension on KhmerVoice {
   String get displayName {
     switch (this) {
+      case KhmerVoice.autoDialogue:
+        return '🎭 ឆ្លាស់សំឡេងស្វ័យប្រវត្តិ (ប្រុស & ស្រី)';
       case KhmerVoice.prasith:
         return '🎙️ សំឡេងប្រសិទ្ធ (ប្រុស)';
       case KhmerVoice.sreymom:
@@ -20,12 +23,21 @@ extension KhmerVoiceExtension on KhmerVoice {
 
   String get shortName {
     switch (this) {
+      case KhmerVoice.autoDialogue:
+        return 'Auto (Male & Female)';
       case KhmerVoice.prasith:
         return 'Prasith (Male)';
       case KhmerVoice.sreymom:
         return 'Sreymom (Female)';
     }
   }
+}
+
+class _DialogueSegment {
+  final String voiceId;
+  final String text;
+
+  _DialogueSegment({required this.voiceId, required this.text});
 }
 
 class KhmerTtsService {
@@ -54,19 +66,30 @@ class KhmerTtsService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final outputFile = File('${tempDir.path}/khmer_voice_$timestamp.mp3');
 
-    final voiceId = (voice == KhmerVoice.prasith) ? prasithVoiceId : sreymomVoiceId;
-
-    // Split text into manageable paragraphs/chunks if it's very long
-    final chunks = _splitTextIntoChunks(text, 500);
+    // Parse text into voice-attributed dialogue segments
+    final segments = _parseDialogueSegments(text, voice);
     final List<int> combinedAudioBytes = [];
 
-    for (int i = 0; i < chunks.length; i++) {
-      final chunkText = chunks[i].trim();
-      if (chunkText.isEmpty) continue;
+    // Flatten segments into manageable chunks
+    final List<_DialogueSegment> executionChunks = [];
+    for (final seg in segments) {
+      final subChunks = _splitTextIntoChunks(seg.text, 500);
+      for (final sub in subChunks) {
+        if (sub.trim().isNotEmpty) {
+          executionChunks.add(_DialogueSegment(voiceId: seg.voiceId, text: sub.trim()));
+        }
+      }
+    }
 
+    if (executionChunks.isEmpty) {
+      throw Exception('មិនមានអត្ថបទសម្រាប់អានសំឡេងឡើយ។');
+    }
+
+    for (int i = 0; i < executionChunks.length; i++) {
+      final chunk = executionChunks[i];
       final chunkBytes = await _callTtsEndpoint(
-        text: chunkText,
-        voiceId: voiceId,
+        text: chunk.text,
+        voiceId: chunk.voiceId,
         speed: speed,
         pitch: pitch,
       );
@@ -74,7 +97,7 @@ class KhmerTtsService {
       combinedAudioBytes.addAll(chunkBytes);
 
       if (onProgress != null) {
-        onProgress((i + 1) / chunks.length);
+        onProgress((i + 1) / executionChunks.length);
       }
     }
 
@@ -84,6 +107,59 @@ class KhmerTtsService {
 
     await outputFile.writeAsBytes(combinedAudioBytes, flush: true);
     return outputFile.path;
+  }
+
+  /// Parses raw script into dialogue segments for male and female voices
+  List<_DialogueSegment> _parseDialogueSegments(String text, KhmerVoice mode) {
+    if (mode == KhmerVoice.prasith) {
+      final cleanText = text.replaceAll(RegExp(r'\[?(ប្រុស|ស្រី)\]?:\s*'), '').trim();
+      return [_DialogueSegment(voiceId: prasithVoiceId, text: cleanText)];
+    }
+
+    if (mode == KhmerVoice.sreymom) {
+      final cleanText = text.replaceAll(RegExp(r'\[?(ប្រុស|ស្រី)\]?:\s*'), '').trim();
+      return [_DialogueSegment(voiceId: sreymomVoiceId, text: cleanText)];
+    }
+
+    // Auto dialogue mode: parse [ប្រុស]: and [ស្រី]: tags
+    final lines = text.split('\n');
+    final List<_DialogueSegment> segments = [];
+    String currentVoiceId = prasithVoiceId; // Default to narrator/male
+    final StringBuffer currentText = StringBuffer();
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+
+      String? lineVoiceId;
+      String cleanLine = trimmed;
+
+      if (trimmed.startsWith(RegExp(r'\[?ស្រី\]?:\s*'))) {
+        lineVoiceId = sreymomVoiceId;
+        cleanLine = trimmed.replaceFirst(RegExp(r'\[?ស្រី\]?:\s*'), '');
+      } else if (trimmed.startsWith(RegExp(r'\[?ប្រុស\]?:\s*'))) {
+        lineVoiceId = prasithVoiceId;
+        cleanLine = trimmed.replaceFirst(RegExp(r'\[?ប្រុស\]?:\s*'), '');
+      }
+
+      if (lineVoiceId != null && lineVoiceId != currentVoiceId) {
+        if (currentText.isNotEmpty) {
+          segments.add(_DialogueSegment(voiceId: currentVoiceId, text: currentText.toString().trim()));
+          currentText.clear();
+        }
+        currentVoiceId = lineVoiceId;
+      }
+
+      currentText.writeln(cleanLine);
+    }
+
+    if (currentText.isNotEmpty) {
+      segments.add(_DialogueSegment(voiceId: currentVoiceId, text: currentText.toString().trim()));
+    }
+
+    return segments.isEmpty
+        ? [_DialogueSegment(voiceId: prasithVoiceId, text: text.replaceAll(RegExp(r'\[?(ប្រុស|ស្រី)\]?:\s*'), ''))]
+        : segments;
   }
 
   /// Sends HTTP POST request to the Khmer TTS engine

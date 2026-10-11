@@ -33,7 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   VideoPlayerController? _previewController;
   VideoMetadata? _videoMetadata;
 
-  KhmerVoice _selectedVoice = KhmerVoice.prasith;
+  KhmerVoice _selectedVoice = KhmerVoice.autoDialogue;
   double _duckingVolume = 0.15; // 15% original background volume
 
   bool _isProcessing = false;
@@ -406,6 +406,77 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 12),
+          // Featured: Auto Dialogue Switching Card
+          InkWell(
+            onTap: () => setState(() => _selectedVoice = KhmerVoice.autoDialogue),
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: _selectedVoice == KhmerVoice.autoDialogue
+                    ? LinearGradient(
+                        colors: [Colors.purpleAccent.withOpacity(0.3), Colors.blueAccent.withOpacity(0.3)],
+                      )
+                    : null,
+                color: _selectedVoice == KhmerVoice.autoDialogue ? null : const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: _selectedVoice == KhmerVoice.autoDialogue ? Colors.purpleAccent : Colors.white12,
+                  width: 1.5,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.purpleAccent.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.auto_awesome, color: Colors.purpleAccent, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              '🎭 ឆ្លាស់សំឡេងស្វ័យប្រវត្តិ (ប្រុស & ស្រី)',
+                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.amber,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'ណែនាំ',
+                                style: TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'តួស្រីប្រើសំឡេងស្រីមុំ • តួប្រុស/អ្នករៀបរាប់ប្រើសំឡេងប្រសិទ្ធ',
+                          style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    _selectedVoice == KhmerVoice.autoDialogue ? Icons.check_circle_rounded : Icons.circle_outlined,
+                    color: _selectedVoice == KhmerVoice.autoDialogue ? Colors.purpleAccent : Colors.white30,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
           Row(
             children: [
               // Male - Prasith
@@ -427,7 +498,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Column(
                       children: [
-                        const Icon(Icons.record_voice_over, color: Colors.blueAccent, size: 24),
+                        const Icon(Icons.record_voice_over, color: Colors.blueAccent, size: 22),
                         const SizedBox(height: 6),
                         const Text(
                           'សំឡេង ប្រសិទ្ធ (ប្រុស)',
@@ -464,7 +535,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Column(
                       children: [
-                        const Icon(Icons.record_voice_over, color: Colors.pinkAccent, size: 24),
+                        const Icon(Icons.record_voice_over, color: Colors.pinkAccent, size: 22),
                         const SizedBox(height: 6),
                         const Text(
                           'សំឡេង ស្រីមុំ (ស្រី)',
