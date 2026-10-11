@@ -27,16 +27,13 @@ class GeminiRecapService {
 
     final bytes = await file.readAsBytes();
 
-    // Use Gemini 1.5 Flash for ultra-fast, high-capacity multimodal video/audio comprehension
-    final model = GenerativeModel(
-      model: 'gemini-1.5-flash',
-      apiKey: apiKey,
-      generationConfig: GenerationConfig(
-        temperature: 0.75,
-        topP: 0.95,
-        maxOutputTokens: 4096,
-      ),
-    );
+    final candidateModels = [
+      'gemini-1.5-flash-latest',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro-latest',
+      'gemini-1.5-pro',
+    ];
 
     final durationMinutes = (videoDurationSeconds / 60).toStringAsFixed(1);
 
@@ -71,11 +68,35 @@ class GeminiRecapService {
       ]),
     ];
 
-    final response = await model.generateContent(content);
-    final script = response.text?.trim() ?? '';
+    String script = '';
+    Exception? lastException;
+
+    for (final modelName in candidateModels) {
+      try {
+        final model = GenerativeModel(
+          model: modelName,
+          apiKey: apiKey,
+          generationConfig: GenerationConfig(
+            temperature: 0.75,
+            topP: 0.95,
+            maxOutputTokens: 4096,
+          ),
+        );
+
+        final response = await model.generateContent(content);
+        final text = response.text?.trim() ?? '';
+        if (text.isNotEmpty) {
+          script = text;
+          break;
+        }
+      } catch (e) {
+        lastException = Exception(e.toString());
+        continue;
+      }
+    }
 
     if (script.isEmpty) {
-      throw Exception('Gemini មិនអាចបង្កើតអត្ថបទសម្រាយរឿងបានទេ។ សូមសាកល្បងម្ដងទៀត។');
+      throw lastException ?? Exception('Gemini មិនអាចបង្កើតអត្ថបទសម្រាយរឿងបានទេ។ សូមសាកល្បងម្ដងទៀត។');
     }
 
     // Clean up any remaining formatting tags so TTS reads cleanly
