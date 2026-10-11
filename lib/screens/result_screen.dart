@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:chewie/chewie.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/ffmpeg_service.dart';
@@ -33,8 +32,7 @@ class ResultScreen extends StatefulWidget {
 }
 
 class _ResultScreenState extends State<ResultScreen> {
-  late VideoPlayerController _videoPlayerController;
-  ChewieController? _chewieController;
+  VideoPlayerController? _videoPlayerController;
   late TextEditingController _scriptController;
   late String _currentDubbedVideoPath;
   late String _currentKhmerAudioPath;
@@ -53,32 +51,16 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   Future<void> _initVideoPlayer(String path) async {
-    _chewieController?.dispose();
-    await _videoPlayerController.dispose().catchError((_) {});
-
+    await _videoPlayerController?.dispose();
     _videoPlayerController = VideoPlayerController.file(File(path));
-    await _videoPlayerController.initialize();
-
-    _chewieController = ChewieController(
-      videoPlayerController: _videoPlayerController,
-      autoPlay: true,
-      looping: false,
-      aspectRatio: _videoPlayerController.value.aspectRatio,
-      materialProgressColors: ChewieProgressColors(
-        playedColor: Colors.amber,
-        handleColor: Colors.amberAccent,
-        backgroundColor: Colors.grey.shade800,
-        bufferedColor: Colors.white24,
-      ),
-    );
-
+    await _videoPlayerController!.initialize();
+    await _videoPlayerController!.play();
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _videoPlayerController.dispose();
-    _chewieController?.dispose();
+    _videoPlayerController?.dispose();
     _scriptController.dispose();
     super.dispose();
   }
@@ -211,8 +193,46 @@ class _ResultScreenState extends State<ResultScreen> {
             Container(
               color: Colors.black,
               height: 250,
-              child: _chewieController != null && _chewieController!.videoPlayerController.value.isInitialized
-                  ? Chewie(controller: _chewieController!)
+              child: _videoPlayerController != null && _videoPlayerController!.value.isInitialized
+                  ? Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        AspectRatio(
+                          aspectRatio: _videoPlayerController!.value.aspectRatio,
+                          child: VideoPlayer(_videoPlayerController!),
+                        ),
+                        IconButton(
+                          iconSize: 52,
+                          icon: Icon(
+                            _videoPlayerController!.value.isPlaying
+                                ? Icons.pause_circle_filled_rounded
+                                : Icons.play_circle_fill_rounded,
+                            color: Colors.white.withOpacity(0.85),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _videoPlayerController!.value.isPlaying
+                                  ? _videoPlayerController!.pause()
+                                  : _videoPlayerController!.play();
+                            });
+                          },
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: VideoProgressIndicator(
+                            _videoPlayerController!,
+                            allowScrubbing: true,
+                            colors: const VideoProgressColors(
+                              playedColor: Colors.amber,
+                              bufferedColor: Colors.white24,
+                              backgroundColor: Colors.black54,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
                   : const Center(child: CircularProgressIndicator(color: Colors.amber)),
             ),
 
