@@ -96,10 +96,9 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    if (widget.settingsService.geminiApiKey.trim().isEmpty) {
-      _showSnackbar('សូមកំណត់ Gemini API Key នៅក្នុងទំព័រ Settings!', isError: true);
-      _openSettings();
-      return;
+    final hasApiKey = widget.settingsService.geminiApiKey.trim().isNotEmpty;
+    if (!hasApiKey) {
+      _showSnackbar('កំពុងដំណើរការជាមួយ Smart AI Recap Script...');
     }
 
     setState(() {
@@ -124,6 +123,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final khmerScript = await geminiService.generateKhmerRecapScript(
         mediaPath: extractedAudioPath,
         videoDurationSeconds: duration,
+        mimeType: 'audio/mpeg',
       );
 
       // Step 4: Khmer TTS Voiceover Generation

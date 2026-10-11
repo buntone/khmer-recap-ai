@@ -222,6 +222,22 @@ class KhmerTtsService {
         );
       }
     } catch (e) {
+      // Reliable Fallback: Google Khmer TTS (free, instant speech in Khmer)
+      try {
+        final encodedText = Uri.encodeComponent(text.trim());
+        final gTtsUri = Uri.parse(
+          'https://translate.google.com/translate_tts?ie=UTF-8&tl=km&client=tw-ob&q=$encodedText',
+        );
+        final gResponse = await http.get(
+          gTtsUri,
+          headers: {'User-Agent': 'Mozilla/5.0 (Android; Mobile)'},
+        ).timeout(const Duration(seconds: 15));
+
+        if (gResponse.statusCode == 200 && gResponse.bodyBytes.isNotEmpty) {
+          return gResponse.bodyBytes;
+        }
+      } catch (_) {}
+
       // If server unreachable or error, handle with informative exception
       throw Exception('បរាជ័យក្នុងការតភ្ជាប់ទៅកាន់ Khmer TTS Engine: $e');
     }
