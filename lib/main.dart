@@ -26,7 +26,7 @@ void main() async {
 class KhmerRecapApp extends StatelessWidget {
   final SettingsService settingsService;
 
-  const KhmerRecapApp({Key? key, required this.settingsService}) : super(key: key);
+  const KhmerRecapApp({super.key, required this.settingsService});
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +46,6 @@ class KhmerRecapApp extends StatelessWidget {
           primary: Color(0xFFE11D48),
           secondary: Color(0xFFF59E0B),
           surface: Color(0xFF1E293B),
-          background: const Color(0xFF0F172A),
         ),
         textTheme: textTheme,
         appBarTheme: const AppBarTheme(

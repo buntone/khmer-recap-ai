@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path/path.dart' as p;
 
 import '../services/settings_service.dart';
 import '../services/gemini_recap_service.dart';
@@ -22,7 +23,7 @@ enum ProcessingStage {
 class HomeScreen extends StatefulWidget {
   final SettingsService settingsService;
 
-  const HomeScreen({Key? key, required this.settingsService}) : super(key: key);
+  const HomeScreen({super.key, required this.settingsService});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -34,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   VideoMetadata? _videoMetadata;
 
   KhmerVoice _selectedVoice = KhmerVoice.autoDialogue;
-  double _duckingVolume = 0.15; // 15% original background volume
+  double _duckingVolume = 0.0; // 0.0 = Mute original Chinese audio completely
 
   bool _isProcessing = false;
   ProcessingStage _currentStage = ProcessingStage.idle;
@@ -98,32 +99,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final hasApiKey = widget.settingsService.geminiApiKey.trim().isNotEmpty;
     if (!hasApiKey) {
-      _showSnackbar('កំពុងដំណើរការជាមួយ Smart AI Recap Script...');
+      _showSnackbar('សូមកំណត់ Gemini API Key នៅក្នុង Settings ជាមុនសិន ដើម្បីឱ្យ AI បកប្រែភាសាចិនក្នុងវីដេអូ!', isError: true);
+      _openSettings();
+      return;
     }
 
     setState(() {
       _isProcessing = true;
       _currentStage = ProcessingStage.analyzingVideo;
-      _statusMessage = 'កំពុងទាញយកសំឡេង និងវិភាគរចនាសម្ព័ន្ធវីដេអូ...';
+      _statusMessage = 'កំពុងរៀបចំ និងបង្រួមវីដេអូសម្រាប់ Gemini AI ពិនិត្យមើលរូបភាព និងអក្សររត់...';
     });
 
     try {
-      // Step 2: Extract audio / compress for Gemini
-      final extractedAudioPath = await _ffmpegService.extractAudioForAnalysis(_selectedVideoPath!);
+      // Step 2: Extract visual video / audio for Gemini
+      final mediaPath = await _ffmpegService.prepareMediaForGemini(_selectedVideoPath!);
+      final mimeType = mediaPath.endsWith('.mp4') ? 'video/mp4' : 'audio/mp3';
 
-      // Step 3: Send to Gemini for Khmer Recap Script Writing
+      // Step 3: Send to Gemini for Chinese Dialogue Translation & Dubbing
       setState(() {
         _currentStage = ProcessingStage.writingScript;
-        _statusMessage = 'Gemini AI កំពុងសរសេរអត្ថបទសម្រាយរឿងខ្មែរ មិនកកស្ទះ...';
+        _statusMessage = 'Gemini AI កំពុងមើលវីដេអូ អានអក្សររត់ និងបកប្រែសាច់រឿងជាភាសាខ្មែរ...';
       });
 
-      final geminiService = GeminiRecapService(apiKey: widget.settingsService.geminiApiKey);
+      final geminiService = GeminiRecapService(apiKeys: widget.settingsService.geminiApiKeys);
       final duration = _videoMetadata?.durationSeconds ?? 60.0;
 
       final khmerScript = await geminiService.generateKhmerRecapScript(
-        mediaPath: extractedAudioPath,
+        mediaPath: mediaPath,
         videoDurationSeconds: duration,
-        mimeType: 'audio/mpeg',
+        mimeType: mimeType,
       );
 
       // Step 4: Khmer TTS Voiceover Generation
@@ -142,6 +146,15 @@ class _HomeScreenState extends State<HomeScreen> {
       final khmerAudioPath = await ttsService.synthesizeKhmerSpeech(
         text: khmerScript,
         voice: _selectedVoice,
+        totalDurationSeconds: duration,
+        syncDelaySeconds: widget.settingsService.audioSyncDelay,
+        onProgress: (progress, current, total) {
+          if (mounted) {
+            setState(() {
+              _statusMessage = 'កំពុងបង្កើតសំឡេងឃ្លាទី $current/$total (${(progress * 100).toInt()}%)...';
+            });
+          }
+        },
       );
 
       // Step 5: Merge final audio with video (audio ducking)
@@ -156,6 +169,24 @@ class _HomeScreenState extends State<HomeScreen> {
         duckingVolume: _duckingVolume,
       );
 
+      // Auto-save dubbed video directly to phone Gallery (DCIM/KhmerRecap)
+      setState(() {
+        _statusMessage = 'កំពុងរក្សាទុកវីដេអូស្វ័យប្រវត្តិចូល Gallery ទូរស័ព្ទ...';
+      });
+
+      String finalGalleryVideoPath = dubbedVideoPath;
+      try {
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final baseName = p.basenameWithoutExtension(_selectedVideoPath!);
+        final savedPath = await _ffmpegService.autoSaveToGallery(
+          dubbedVideoPath,
+          customName: '${baseName}_Recap_$timestamp',
+        );
+        finalGalleryVideoPath = savedPath;
+      } catch (e) {
+        debugPrint('Auto-save to gallery warning: $e');
+      }
+
       // Pipeline Complete - Navigate to Result Screen
       setState(() {
         _isProcessing = false;
@@ -168,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => ResultScreen(
-            dubbedVideoPath: dubbedVideoPath,
+            dubbedVideoPath: finalGalleryVideoPath,
             originalVideoPath: _selectedVideoPath!,
             khmerAudioPath: khmerAudioPath,
             generatedScript: khmerScript,
@@ -210,30 +241,60 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF0A0E1A),
       appBar: AppBar(
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(6),
+              width: 34,
+              height: 34,
               decoration: BoxDecoration(
-                color: Colors.amber.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(9),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.cyanAccent.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.movie_filter_rounded, color: Colors.amber, size: 20),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(9),
+                child: Image.asset(
+                  'assets/images/app_logo.png',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.movie_filter_rounded, color: Colors.amberAccent, size: 22),
+                ),
+              ),
             ),
             const SizedBox(width: 10),
-            const Text(
-              'Khmer Recap AI Studio',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Khmer Dubbing Studio',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'AI Chinese to Khmer Voiceover',
+                    style: TextStyle(fontSize: 10, color: Colors.cyanAccent),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: const Color(0xFF111827),
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings_rounded, color: Colors.white70),
+            icon: const Icon(Icons.settings_rounded, color: Colors.cyanAccent),
             tooltip: 'ការកំណត់ (Settings)',
             onPressed: _openSettings,
           ),
@@ -294,7 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Container(
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.12),
+                        color: Colors.amber.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.video_library_rounded, size: 48, color: Colors.amber),
@@ -333,7 +394,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         _previewController?.value.isPlaying == true
                             ? Icons.pause_circle_filled_rounded
                             : Icons.play_circle_fill_rounded,
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withValues(alpha: 0.85),
                       ),
                       onPressed: () {
                         setState(() {
@@ -397,10 +458,10 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           const Row(
             children: [
-              Icon(Icons.mic_external_on_rounded, color: Colors.purpleAccent, size: 20),
+              Icon(Icons.record_voice_over_rounded, color: Colors.purpleAccent, size: 20),
               SizedBox(width: 8),
               Text(
-                'ជ្រើសរើសសំឡេងអាន (Voice Selector)',
+                'ជ្រើសរើសសំឡេងអាន',
                 style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
               ),
             ],
@@ -415,7 +476,7 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: BoxDecoration(
                 gradient: _selectedVoice == KhmerVoice.autoDialogue
                     ? LinearGradient(
-                        colors: [Colors.purpleAccent.withOpacity(0.3), Colors.blueAccent.withOpacity(0.3)],
+                        colors: [Colors.purpleAccent.withValues(alpha: 0.3), Colors.blueAccent.withValues(alpha: 0.3)],
                       )
                     : null,
                 color: _selectedVoice == KhmerVoice.autoDialogue ? null : const Color(0xFF0F172A),
@@ -430,7 +491,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.purpleAccent.withOpacity(0.2),
+                      color: Colors.purpleAccent.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.auto_awesome, color: Colors.purpleAccent, size: 24),
@@ -442,9 +503,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Row(
                           children: [
-                            const Text(
-                              '🎭 ឆ្លាស់សំឡេងស្វ័យប្រវត្តិ (ប្រុស & ស្រី)',
-                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                            const Flexible(
+                              child: Text(
+                                '🎭 ឆ្លាស់សំឡេង (ប្រុស & ស្រី)',
+                                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             const SizedBox(width: 6),
                             Container(
@@ -462,8 +527,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'តួស្រីប្រើសំឡេងស្រីមុំ • តួប្រុស/អ្នករៀបរាប់ប្រើសំឡេងប្រសិទ្ធ',
-                          style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 11),
+                          'សំឡេងស្រីមុំ & សំឡេងប្រសិទ្ធឆ្លាស់គ្នា',
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -485,10 +552,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () => setState(() => _selectedVoice = KhmerVoice.prasith),
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                     decoration: BoxDecoration(
                       color: _selectedVoice == KhmerVoice.prasith
-                          ? Colors.blueAccent.withOpacity(0.2)
+                          ? Colors.blueAccent.withValues(alpha: 0.2)
                           : const Color(0xFF0F172A),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
@@ -501,14 +568,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Icon(Icons.record_voice_over, color: Colors.blueAccent, size: 22),
                         const SizedBox(height: 6),
                         const Text(
-                          'សំឡេង ប្រសិទ្ធ (ប្រុស)',
+                          'ប្រសិទ្ធ (ប្រុស)',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'ទឹកដមរស់រវើក ជក់ចិត្ត',
-                          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 10),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -522,10 +594,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () => setState(() => _selectedVoice = KhmerVoice.sreymom),
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                     decoration: BoxDecoration(
                       color: _selectedVoice == KhmerVoice.sreymom
-                          ? Colors.pinkAccent.withOpacity(0.2)
+                          ? Colors.pinkAccent.withValues(alpha: 0.2)
                           : const Color(0xFF0F172A),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
@@ -538,14 +610,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Icon(Icons.record_voice_over, color: Colors.pinkAccent, size: 22),
                         const SizedBox(height: 6),
                         const Text(
-                          'សំឡេង ស្រីមុំ (ស្រី)',
+                          'ស្រីមុំ (ស្រី)',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'ពិរោះ រណ្ដំ ស្រទន់',
-                          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 10),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -560,12 +637,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildAudioDuckingCard() {
+    final isMuted = _duckingVolume <= 0.01;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF1E293B),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(
+          color: isMuted ? const Color(0xFF10B981) : Colors.white10,
+          width: isMuted ? 1.5 : 1.0,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -573,29 +655,51 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
-                children: [
-                  Icon(Icons.volume_down_rounded, color: Colors.tealAccent, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'កម្រិតសំឡេងដើម/ភ្លេងក្រោយ (Audio Ducking)',
-                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                  ),
-                ],
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(
+                      isMuted ? Icons.volume_off_rounded : Icons.volume_down_rounded,
+                      color: isMuted ? Colors.greenAccent : Colors.tealAccent,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'កម្រិតសំឡេងចិនដើម',
+                        style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              Text(
-                '${(_duckingVolume * 100).toInt()}%',
-                style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold, fontSize: 14),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isMuted ? Colors.greenAccent.withValues(alpha: 0.15) : Colors.tealAccent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  isMuted ? 'បិទឈឹង 0%' : '${(_duckingVolume * 100).toInt()}%',
+                  style: TextStyle(
+                    color: isMuted ? Colors.greenAccent : Colors.tealAccent,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              activeTrackColor: Colors.tealAccent,
+              activeTrackColor: isMuted ? Colors.white24 : Colors.tealAccent,
               inactiveTrackColor: Colors.white12,
-              thumbColor: Colors.tealAccent,
-              overlayColor: Colors.tealAccent.withOpacity(0.2),
+              thumbColor: isMuted ? Colors.greenAccent : Colors.tealAccent,
+              overlayColor: Colors.tealAccent.withValues(alpha: 0.2),
             ),
             child: Slider(
               value: _duckingVolume,
@@ -605,11 +709,26 @@ class _HomeScreenState extends State<HomeScreen> {
               onChanged: (val) => setState(() => _duckingVolume = val),
             ),
           ),
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('0% (បិទសំឡេងចិនដើម)', style: TextStyle(color: Colors.white38, fontSize: 10)),
-              Text('100% (សំឡេងពេញ)', style: TextStyle(color: Colors.white38, fontSize: 10)),
+              TextButton.icon(
+                onPressed: () => setState(() => _duckingVolume = 0.0),
+                icon: const Icon(Icons.volume_mute_rounded, size: 16, color: Colors.greenAccent),
+                label: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'បិទសំឡេងចិន (0% Mute)',
+                    style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  backgroundColor: isMuted ? Colors.greenAccent.withValues(alpha: 0.1) : Colors.white10,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const Text('100% (សំឡេងពេញ)', style: TextStyle(color: Colors.white38, fontSize: 10)),
             ],
           ),
         ],
@@ -618,14 +737,28 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildActionButton() {
-    return SizedBox(
-      height: 56,
+    return Container(
+      height: 54,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6366F1), Color(0xFF06B6D4)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFE11D48),
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
           foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          elevation: 6,
         ),
         onPressed: _isProcessing ? null : _startRecapPipeline,
         child: _isProcessing
@@ -634,16 +767,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)),
                   SizedBox(width: 12),
-                  Text('កំពុងដំណើរការផលិតវីដេអូ...', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  Flexible(
+                    child: Text(
+                      'កំពុងដំណើរការបកប្រែ និងបញ្ចូលសំឡេង...',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               )
             : const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('🚀 ', style: TextStyle(fontSize: 20)),
-                  Text(
-                    'បង្កើតវីដេអូសម្រាយរឿង (Generate Recap)',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  Text('🚀 ', style: TextStyle(fontSize: 18)),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'បង្កើតវីដេអូបកប្រែ និងបញ្ចូលសំឡេង',
+                        style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -677,7 +822,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 16),
           _buildStageRow(1, 'កំពុងវិភាគវីដេអូ (Analyzing Video)', ProcessingStage.analyzingVideo),
           const SizedBox(height: 10),
-          _buildStageRow(2, 'កំពុងសរសេរអត្ថបទសម្រាយ (Writing Khmer Script)', ProcessingStage.writingScript),
+          _buildStageRow(2, 'កំពុងបកប្រែការសន្ទនា (Translating Dialogue)', ProcessingStage.writingScript),
           const SizedBox(height: 10),
           _buildStageRow(3, 'កំពុងបំប្លែងសំឡេង (Generating Voice)', ProcessingStage.generatingVoice),
           const SizedBox(height: 10),
