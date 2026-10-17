@@ -20,6 +20,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _watermarkTextController;
   late double _syncDelay;
   late bool _watermarkEnabled;
+  late bool _subtitleEnabled;
+  late String _subtitleColor;
   bool _isTestingKeys = false;
   Map<String, bool?> _keyValidationStatus = {};
 
@@ -39,6 +41,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextEditingController(text: widget.settingsService.watermarkText);
     _syncDelay = widget.settingsService.audioSyncDelay;
     _watermarkEnabled = widget.settingsService.watermarkEnabled;
+    _subtitleEnabled = widget.settingsService.subtitleEnabled;
+    _subtitleColor = widget.settingsService.subtitleColor;
   }
 
   @override
@@ -131,6 +135,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     widget.settingsService.audioSyncDelay = _syncDelay;
     widget.settingsService.watermarkEnabled = _watermarkEnabled;
     widget.settingsService.watermarkText = _watermarkTextController.text.trim();
+    widget.settingsService.subtitleEnabled = _subtitleEnabled;
+    widget.settingsService.subtitleColor = _subtitleColor;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -669,6 +675,108 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
 
+            const SizedBox(height: 20),
+
+            // On-Video Khmer Subtitles Card
+            _buildSectionCard(
+              title: 'អក្សររត់លើវីដេអូ (Khmer Subtitles)',
+              subtitle: 'បង្ហាញអក្សររត់ភាសាខ្មែរទំហំតូចល្មមលើវីដេអូ (9:16 Optimized)',
+              icon: Icons.subtitles_rounded,
+              color: Colors.amberAccent,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('បើកដំណើរការអក្សររត់ខ្មែរ',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13)),
+                          Text('រត់តាមវិនាទី និងមាត់តួអង្គនិយាយលើវីដេអូ',
+                              style: TextStyle(
+                                  color: Colors.white54, fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _subtitleEnabled,
+                      activeColor: Colors.amberAccent,
+                      onChanged: (val) =>
+                          setState(() => _subtitleEnabled = val),
+                    ),
+                  ],
+                ),
+                if (_subtitleEnabled) ...[
+                  const SizedBox(height: 14),
+                  const Text('ជ្រើសរើសពណ៌អក្សររត់ (Subtitle Color):',
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _buildColorChip('yellow', '🟡 លឿងមាស', Colors.amberAccent),
+                      const SizedBox(width: 8),
+                      _buildColorChip('white', '⚪ សស្អាត', Colors.white),
+                      const SizedBox(width: 8),
+                      _buildColorChip('cyan', '🔵 ផ្ទៃមេឃ', Colors.cyanAccent),
+                      const SizedBox(width: 8),
+                      _buildColorChip('green', '🟢 បៃតង', Colors.greenAccent),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Live Subtitle Preview
+                  Container(
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Text('គំរូអក្សររត់លើវីដេអូ (Preview):',
+                            style: TextStyle(color: Colors.white38, fontSize: 10)),
+                        const SizedBox(height: 6),
+                        Text(
+                          'បីឆ្នាំមុន នាងត្រូវបានគេបណ្តេញចេញពីត្រកូល',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _getPreviewColor(_subtitleColor),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            shadows: const [
+                              Shadow(
+                                  color: Colors.black,
+                                  blurRadius: 4,
+                                  offset: Offset(1, 1)),
+                              Shadow(
+                                  color: Colors.black,
+                                  blurRadius: 4,
+                                  offset: Offset(-1, -1)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '💡 អក្សររត់ត្រូវបានរចនាទំហំតូចល្មម (Compact) មិនបាំងវីដេអូ និងមិនធំលើសវីដេអូ 9:16 ឡើយ។',
+                    style: TextStyle(color: Colors.white54, fontSize: 10.5),
+                  ),
+                ],
+              ],
+            ),
+
             const SizedBox(height: 24),
 
             // Save Action Button
@@ -761,6 +869,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 16),
           ...children,
         ],
+      ),
+    );
+  }
+
+  Color _getPreviewColor(String colorTheme) {
+    switch (colorTheme.toLowerCase()) {
+      case 'white':
+        return Colors.white;
+      case 'cyan':
+        return Colors.cyanAccent;
+      case 'green':
+        return Colors.greenAccent;
+      case 'yellow':
+      default:
+        return Colors.amberAccent;
+    }
+  }
+
+  Widget _buildColorChip(String theme, String label, Color color) {
+    final isSelected = _subtitleColor == theme;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _subtitleColor = theme),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? color.withValues(alpha: 0.22)
+                : const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected ? color : Colors.white12,
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white30),
+                ),
+              ),
+              const SizedBox(height: 4),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : Colors.white60,
+                    fontSize: 10,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

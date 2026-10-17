@@ -180,6 +180,9 @@ class _HomeScreenState extends State<HomeScreen> {
         watermarkText: widget.settingsService.watermarkEnabled
             ? widget.settingsService.watermarkText
             : null,
+        scriptText: khmerScript,
+        subtitleEnabled: widget.settingsService.subtitleEnabled,
+        subtitleColor: widget.settingsService.subtitleColor,
       );
 
       // Auto-save dubbed video directly to phone Gallery (DCIM/KhmerRecap)

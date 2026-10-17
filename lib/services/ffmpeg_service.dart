@@ -199,14 +199,185 @@ class FFmpegService {
     return file.path;
   }
 
+  /// Parses timestamps like "00:00:02,800", "01:28", "88.5" into total seconds
+  static double? _parseTimeToSeconds(String? timeStr) {
+    if (timeStr == null) return null;
+    var s = timeStr
+        .trim()
+        .replaceAll('[', '')
+        .replaceAll(']', '')
+        .replaceAll('(', '')
+        .replaceAll(')', '');
+    if (s.isEmpty) return null;
+    s = s.replaceAll(',', '.');
+
+    final parts = s.split(':');
+    if (parts.length == 3) {
+      final h = double.tryParse(parts[0]) ?? 0;
+      final m = double.tryParse(parts[1]) ?? 0;
+      final sec = double.tryParse(parts[2]) ?? 0;
+      return h * 3600 + m * 60 + sec;
+    } else if (parts.length == 2) {
+      final m = double.tryParse(parts[0]) ?? 0;
+      final sec = double.tryParse(parts[1]) ?? 0;
+      return m * 60 + sec;
+    } else if (parts.length == 1) {
+      return double.tryParse(parts[0]);
+    }
+    return null;
+  }
+
+  static String _formatAssTime(double totalSec) {
+    final h = totalSec ~/ 3600;
+    final m = (totalSec % 3600) ~/ 60;
+    final s = totalSec % 60;
+    final sInt = s.toInt();
+    final cs = ((s - sInt) * 100).toInt();
+    return '$h:${m.toString().padLeft(2, '0')}:${sInt.toString().padLeft(2, '0')}.${cs.toString().padLeft(2, '0')}';
+  }
+
+  /// Generates a styled ASS subtitle file tuned specifically for 9:16 mobile videos (compact & elegant)
+  Future<String> createSubtitlesAssFile({
+    required String scriptText,
+    int videoWidth = 720,
+    int videoHeight = 1280,
+    String colorTheme = 'yellow',
+    String? outputPath,
+  }) async {
+    final String assPath;
+    if (outputPath != null && outputPath.isNotEmpty) {
+      assPath = outputPath;
+    } else {
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      assPath = '${tempDir.path}/subtitles_$timestamp.ass';
+    }
+
+    final isPortrait = videoHeight >= videoWidth;
+    final playResX = isPortrait ? 720 : 1280;
+    final playResY = isPortrait ? 1280 : 720;
+    // Compact font size: 23 for 9:16 portrait so it never looks bulky or blocks the video
+    final fontSize = isPortrait ? 23 : 28;
+    final marginV = isPortrait ? 85 : 45;
+    final marginLR = isPortrait ? 24 : 50;
+
+    // ASS PrimaryColour is in &HAABBGGRR format
+    String primaryColor;
+    switch (colorTheme.toLowerCase()) {
+      case 'white':
+        primaryColor = '&H00FFFFFF';
+        break;
+      case 'cyan':
+        primaryColor = '&H00FFFF00'; // Cyan
+        break;
+      case 'green':
+        primaryColor = '&H0033FF33'; // Lime green
+        break;
+      case 'yellow':
+      default:
+        primaryColor = '&H0000E5FF'; // Golden Amber / Yellow
+        break;
+    }
+
+    final buffer = StringBuffer();
+    buffer.writeln('[Script Info]');
+    buffer.writeln('ScriptType: v4.00+');
+    buffer.writeln('PlayResX: $playResX');
+    buffer.writeln('PlayResY: $playResY');
+    buffer.writeln('ScaledBorderAndShadow: yes');
+    buffer.writeln('');
+    buffer.writeln('[V4+ Styles]');
+    buffer.writeln(
+        'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding');
+    buffer.writeln(
+        'Style: Default,sans-serif,$fontSize,$primaryColor,&H00000000,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,2.0,0.8,2,$marginLR,$marginLR,$marginV,1');
+    buffer.writeln('');
+    buffer.writeln('[Events]');
+    buffer.writeln(
+        'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text');
+
+    final timePattern = RegExp(
+        r'\[?\(?(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)(?:\s*(?:-->|[-–])\s*(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?))?\)?\]?');
+
+    final lines = scriptText.split('\n');
+    final parsedEvents = <Map<String, dynamic>>[];
+
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+      if (RegExp(r'^\d+$').hasMatch(line)) continue;
+      if (!RegExp(r'[\u1780-\u17FF]').hasMatch(line)) continue;
+
+      final tMatch = timePattern.firstMatch(line);
+      if (tMatch == null) continue;
+
+      final startSec = _parseTimeToSeconds(tMatch.group(1));
+      final endSec = _parseTimeToSeconds(tMatch.group(2));
+      if (startSec == null) continue;
+
+      var cleanText = line
+          .replaceAll(timePattern, '')
+          .replaceAll('[ប្រុស]:', '')
+          .replaceAll('[ស្រី]:', '')
+          .replaceAll('[ប្រុស]', '')
+          .replaceAll('[ស្រី]', '')
+          .replaceAll(RegExp(r'^[:៖\-–\s]+'), '')
+          .trim();
+
+      cleanText = cleanText.replaceAll('"', '').trim();
+      if (cleanText.isEmpty) continue;
+
+      // Smart line wrapping for 9:16 vertical video
+      if (cleanText.length > 22 && !cleanText.contains(r'\N')) {
+        int splitIdx = cleanText.indexOf(' ', 16);
+        if (splitIdx == -1 || splitIdx > 26) {
+          splitIdx = cleanText.length ~/ 2;
+        }
+        cleanText =
+            '${cleanText.substring(0, splitIdx).trim()}\\N${cleanText.substring(splitIdx).trim()}';
+      }
+
+      parsedEvents.add({
+        'start': startSec,
+        'end': endSec,
+        'text': cleanText,
+      });
+    }
+
+    for (int i = 0; i < parsedEvents.length; i++) {
+      final ev = parsedEvents[i];
+      final start = ev['start'] as double;
+      double end = ev['end'] as double? ??
+          (i + 1 < parsedEvents.length
+              ? (parsedEvents[i + 1]['start'] as double)
+              : start + 3.0);
+
+      if (end <= start) end = start + 2.5;
+      if (end - start > 4.5) end = start + 3.8;
+
+      final startStr = _formatAssTime(start);
+      final endStr = _formatAssTime(end);
+      final text = ev['text'] as String;
+
+      buffer.writeln('Dialogue: 0,$startStr,$endStr,Default,,0,0,0,,$text');
+    }
+
+    final assFile = File(assPath);
+    await assFile.writeAsString(buffer.toString(), flush: true);
+    return assFile.path;
+  }
+
   /// Merges the newly synthesized Khmer voice with original video,
   /// stripping out Chinese spoken dialogue and preserving background music/SFX underneath.
-  /// Applies moving / bouncing watermark logo across the video continuously if [watermarkText] is provided.
+  /// Optionally burns in on-screen Khmer subtitles and moving watermark.
   Future<String> mergeKhmerVoiceWithVideo({
     required String originalVideoPath,
     required String khmerAudioPath,
     required double duckingVolume, // 0.0 to 1.0
     String? watermarkText,
+    String? scriptText,
+    bool subtitleEnabled = true,
+    String subtitleColor = 'yellow',
     Function(int progressPercentage)? onProgress,
   }) async {
     final tempDir = await getTemporaryDirectory();
@@ -219,6 +390,8 @@ class FFmpegService {
         .toStringAsFixed(2);
     final bgAudioFilter =
         '[0:a]aformat=channel_layouts=stereo,pan=stereo|c0=0.5*c0-0.5*c1|c1=0.5*c1-0.5*c0,volume=$bgVolume[bg];[1:a]volume=1.35[khmer];[khmer][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]';
+
+    final videoMeta = await probeVideo(originalVideoPath);
 
     // Check if original video has audio track first
     final mediaInfo = await FFprobeKit.getMediaInformation(originalVideoPath);
@@ -238,25 +411,54 @@ class FFmpegService {
       }
     }
 
-    String cmd;
-    if (watermarkImgPath != null) {
-      // Overlay moving/bouncing watermark continuously across the video
-      // x oscillates smoothly between 20 and W-w-20
-      // y oscillates smoothly between 25 and H-h-25
-      const overlayMotion =
-          "[0:v][2:v]overlay=x='20+(W-w-40)*(0.5+0.5*sin(t*0.6))':y='25+(H-h-50)*(0.5+0.5*cos(t*0.45))'[vout]";
-
-      if (hasOriginalAudio) {
-        cmd =
-            '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" -i "$watermarkImgPath" '
-            '-filter_complex "$overlayMotion;$bgAudioFilter" '
-            '-map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
-      } else {
-        cmd =
-            '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" -i "$watermarkImgPath" '
-            '-filter_complex "$overlayMotion" '
-            '-map "[vout]" -map 1:a:0 -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
+    String? subtitleAssPath;
+    if (subtitleEnabled && scriptText != null && scriptText.trim().isNotEmpty) {
+      try {
+        subtitleAssPath = await createSubtitlesAssFile(
+          scriptText: scriptText,
+          videoWidth: videoMeta.width,
+          videoHeight: videoMeta.height,
+          colorTheme: subtitleColor,
+        );
+      } catch (e) {
+        debugPrint('Warning: Could not create subtitle ASS file: $e');
       }
+    }
+
+    String? escapedAssPath;
+    if (subtitleAssPath != null) {
+      escapedAssPath =
+          subtitleAssPath.replaceAll(r'\', '/').replaceAll(':', r'\:');
+    }
+
+    // Build video filter graph
+    String vFilter = '';
+    String vMap = '0:v:0';
+    String watermarkInput = '';
+
+    if (watermarkImgPath != null && escapedAssPath != null) {
+      watermarkInput = '-i "$watermarkImgPath"';
+      vFilter =
+          "[0:v]subtitles='$escapedAssPath'[vsub];[vsub][2:v]overlay=x='20+(W-w-40)*(0.5+0.5*sin(t*0.6))':y='25+(H-h-50)*(0.5+0.5*cos(t*0.45))'[vout]";
+      vMap = '[vout]';
+    } else if (watermarkImgPath != null) {
+      watermarkInput = '-i "$watermarkImgPath"';
+      vFilter =
+          "[0:v][2:v]overlay=x='20+(W-w-40)*(0.5+0.5*sin(t*0.6))':y='25+(H-h-50)*(0.5+0.5*cos(t*0.45))'[vout]";
+      vMap = '[vout]';
+    } else if (escapedAssPath != null) {
+      vFilter = "[0:v]subtitles='$escapedAssPath'[vout]";
+      vMap = '[vout]';
+    }
+
+    String cmd;
+    if (vFilter.isNotEmpty) {
+      final filterGraph =
+          hasOriginalAudio ? '$vFilter;$bgAudioFilter' : vFilter;
+      final aMap = hasOriginalAudio ? '-map "[aout]"' : '-map 1:a:0';
+      cmd = '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" $watermarkInput '
+          '-filter_complex "$filterGraph" '
+          '-map "$vMap" $aMap -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
     } else {
       if (hasOriginalAudio) {
         cmd = '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" '
@@ -273,31 +475,31 @@ class FFmpegService {
 
     if (ReturnCode.isSuccess(returnCode)) {
       return outputVideoPath;
-    } else {
-      // If stream copy failed due to container flags, fallback to re-encoding with H.264
-      String fallbackCmd;
-      if (hasOriginalAudio) {
-        fallbackCmd =
-            '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" '
-            '-filter_complex "$bgAudioFilter" '
-            '-map 0:v:0 -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
-      } else {
-        fallbackCmd =
-            '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" '
-            '-map 0:v:0 -map 1:a:0 -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
-      }
-
-      final fallbackSession = await FFmpegKit.execute(fallbackCmd);
-      final fallbackReturnCode = await fallbackSession.getReturnCode();
-
-      if (ReturnCode.isSuccess(fallbackReturnCode)) {
-        return outputVideoPath;
-      }
-
-      final logs = await session.getAllLogsAsString();
-      throw Exception(
-          'FFmpeg បរាជ័យក្នុងការច្របាច់បញ្ចូលសំឡេង និងវីដេអូ: $logs');
     }
+
+    // Graceful fallback: If subtitle or filter complex encountered any error on this device,
+    // run baseline audio merge without subtitle filter so user always gets their video successfully
+    String fallbackCmd;
+    if (hasOriginalAudio) {
+      fallbackCmd =
+          '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" '
+          '-filter_complex "$bgAudioFilter" '
+          '-map 0:v:0 -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
+    } else {
+      fallbackCmd =
+          '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" '
+          '-map 0:v:0 -map 1:a:0 -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
+    }
+
+    final fallbackSession = await FFmpegKit.execute(fallbackCmd);
+    final fallbackReturnCode = await fallbackSession.getReturnCode();
+
+    if (ReturnCode.isSuccess(fallbackReturnCode)) {
+      return outputVideoPath;
+    }
+
+    final logs = await session.getAllLogsAsString();
+    throw Exception('FFmpeg បរាជ័យក្នុងការច្របាច់បញ្ចូលសំឡេង និងវីដេអូ: $logs');
   }
 
   /// Exports standalone Khmer recap audio to persistent Android storage

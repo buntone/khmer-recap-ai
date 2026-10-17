@@ -266,6 +266,9 @@ class _ResultScreenState extends State<ResultScreen> {
         watermarkText: widget.settingsService.watermarkEnabled
             ? widget.settingsService.watermarkText
             : null,
+        scriptText: newScript,
+        subtitleEnabled: widget.settingsService.subtitleEnabled,
+        subtitleColor: widget.settingsService.subtitleColor,
       );
 
       // Auto-save re-generated video directly to phone Gallery (DCIM/KhmerRecap)

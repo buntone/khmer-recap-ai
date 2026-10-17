@@ -11,6 +11,9 @@ class SettingsService {
   static const String keyAudioSyncDelay = 'audio_sync_delay_ms';
   static const String keyWatermarkEnabled = 'watermark_enabled';
   static const String keyWatermarkText = 'watermark_text';
+  static const String keySubtitleEnabled = 'subtitle_enabled';
+  static const String keySubtitleColor = 'subtitle_color';
+  static const String keySubtitleFontSize = 'subtitle_font_size';
 
   // Default values
   static const String defaultTtsEndpoint = 'https://api.khmervoice.ai/v1/tts';
@@ -128,4 +131,19 @@ class SettingsService {
       _prefs.getString(keyWatermarkText) ?? defaultWatermarkText;
   set watermarkText(String val) =>
       _prefs.setString(keyWatermarkText, val.trim());
+
+  /// On-video Khmer subtitle display toggle (default: true)
+  bool get subtitleEnabled => _prefs.getBool(keySubtitleEnabled) ?? true;
+  set subtitleEnabled(bool val) => _prefs.setBool(keySubtitleEnabled, val);
+
+  /// Subtitle color: 'yellow' (default), 'white', 'cyan', 'green'
+  String get subtitleColor =>
+      _prefs.getString(keySubtitleColor) ?? 'yellow';
+  set subtitleColor(String val) => _prefs.setString(keySubtitleColor, val);
+
+  /// Subtitle font size: 'small' (compact, 9:16 optimized), 'medium'
+  String get subtitleFontSize =>
+      _prefs.getString(keySubtitleFontSize) ?? 'small';
+  set subtitleFontSize(String val) =>
+      _prefs.setString(keySubtitleFontSize, val);
 }

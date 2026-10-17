@@ -93,4 +93,42 @@ void main() {
       } catch (_) {}
     });
   });
+
+  test(
+      'createSubtitlesAssFile generates valid ASS subtitles formatted for 9:16',
+      () async {
+    final ffmpeg = FFmpegService();
+    const script = '''
+[00:01 - 00:04] [ប្រុស]: បីឆ្នាំមុន នាងត្រូវបានគេបណ្តេញចេញពីត្រកូល។
+[00:04 - 00:07] [ស្រី]: (ក្នុងចិត្ត) ថ្ងៃនេះខ្ញុំត្រលប់មកវិញ ដើម្បីទាមទារភាពយុត្តិធម៌!
+''';
+
+    final tempDir = Directory.systemTemp;
+    final outPath =
+        '${tempDir.path}/test_sub_${DateTime.now().millisecondsSinceEpoch}.ass';
+
+    final assPath = await ffmpeg.createSubtitlesAssFile(
+      scriptText: script,
+      videoWidth: 720,
+      videoHeight: 1280,
+      colorTheme: 'yellow',
+      outputPath: outPath,
+    );
+
+    final file = File(assPath);
+    expect(await file.exists(), isTrue);
+    final content = await file.readAsString();
+    expect(content.contains('[Script Info]'), isTrue);
+    expect(content.contains('PlayResX: 720'), isTrue);
+    expect(content.contains('PlayResY: 1280'), isTrue);
+    expect(
+        content.contains('Dialogue: 0,0:00:01.00,0:00:04.00,Default'), isTrue);
+    expect(
+        content.contains('Dialogue: 0,0:00:04.00,0:00:07.00,Default'), isTrue);
+    expect(content.contains('&H0000E5FF'), isTrue); // Yellow color
+
+    try {
+      await file.delete();
+    } catch (_) {}
+  });
 }
