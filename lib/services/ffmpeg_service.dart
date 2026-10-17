@@ -149,16 +149,16 @@ class FFmpegService {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
-    // 1. Crisp black outline stroke with zero blur (sharp, non-bleeding border)
+    // 1. Subtle, semi-transparent dark outline stroke (25% opacity)
     final outlineSpan = TextSpan(
       text: text,
       style: TextStyle(
-        fontSize: 32,
-        fontWeight: FontWeight.bold,
+        fontSize: 24,
+        fontWeight: FontWeight.w600,
         foreground: Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 3.5
-          ..color = const Color(0xFF000000),
+          ..strokeWidth = 2.0
+          ..color = const Color(0x40000000), // ~25% translucent dark outline
       ),
     );
     final outlinePainter = TextPainter(
@@ -167,13 +167,13 @@ class FFmpegService {
     );
     outlinePainter.layout();
 
-    // 2. Pure white fill (sharp & clear)
+    // 2. Soft, translucent white fill (40% opacity) so video content shines through cleanly
     final fillSpan = TextSpan(
       text: text,
       style: const TextStyle(
-        color: Colors.white,
-        fontSize: 32,
-        fontWeight: FontWeight.bold,
+        color: Color(0x66FFFFFF), // ~40% opacity soft translucent white
+        fontSize: 24,
+        fontWeight: FontWeight.w600,
       ),
     );
     final fillPainter = TextPainter(
