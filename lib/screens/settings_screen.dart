@@ -554,7 +554,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          '+${_syncDelay.toStringAsFixed(1)}s (វិនាទី)',
+                          '${_syncDelay >= 0 ? "+" : ""}${_syncDelay.toStringAsFixed(1)}s (វិនាទី)',
                           style: const TextStyle(
                               color: Colors.amberAccent,
                               fontWeight: FontWeight.bold,
@@ -565,7 +565,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'ប្រសិនបើសំឡេងចេញមុនមាត់មនុស្សនិយាយ សូមដំឡើងវិនាទីពន្យារពេល (Default: 0.0s) ដើម្បីឱ្យសំឡេងត្រូវគ្នានឹងមាត់តួអង្គ ១០០%។',
+                    'សារ៉េពន្យារពេល ឬរំកិលសំឡេងឱ្យត្រូវមាត់តួអង្គ (Default: 0.0s ធម្មជាតិ)៖ ប្រសិនបើសំឡេងចេញយឺតជាងមាត់ អាចរំកិលទៅដក (-) ប្រសិនបើសំឡេងចេញលឿនជាងមាត់ អាចរំកិលទៅបូក (+)។',
                     style: TextStyle(
                         color: Colors.white60, fontSize: 11, height: 1.4),
                   ),
@@ -579,22 +579,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     child: Slider(
                       value: _syncDelay,
-                      min: 0.0,
-                      max: 3.0,
-                      divisions: 30,
+                      min: -1.5,
+                      max: 2.0,
+                      divisions: 35,
                       onChanged: (val) => setState(() => _syncDelay = val),
                     ),
                   ),
                   const Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('0.0s (ធម្មជាតិ)',
+                      Text('-1.5s (មុនមាត់)',
                           style:
                               TextStyle(color: Colors.white38, fontSize: 10)),
-                      Text('+1.0s',
+                      Text('0.0s (ធម្មជាតិ)',
                           style: TextStyle(
                               color: Colors.amberAccent, fontSize: 10)),
-                      Text('+3.0s (ពន្យារ)',
+                      Text('+2.0s (ពន្យារ)',
                           style:
                               TextStyle(color: Colors.white38, fontSize: 10)),
                     ],

@@ -233,59 +233,111 @@ class KhmerTtsService {
           'បរាជ័យក្នុងការបង្កើតសំឡេង (Failed to generate voice clips).');
     }
 
-    // Build timeline playlist by inserting pure Dart silence gaps to ensure perfect lip-sync
-    final List<File> timelinePlaylist = [];
-    double currentTimelinePos = 0.0;
+    // 3. Build master PCM audio timeline:
+    // Placed at exact millisecond sample offsets to ensure 100% frame-perfect lip sync,
+    // zero cumulative drift, and zero cutoffs at the end of the video!
+    const sampleRate = 24000;
+    const channels = 1;
+    const bytesPerSample = 2; // 16-bit mono PCM = 2 bytes per sample
+    final totalSamples = (totalDurationSeconds * sampleRate).round();
+    final totalPcmBytes = totalSamples * channels * bytesPerSample;
+    final masterPcm = Uint8List(totalPcmBytes); // Initialized with 0 (clean digital silence)
 
-    for (int i = 0; i < chunkFiles.length; i++) {
+    for (int i = 0; i < chunkFiles.length && i < segments.length; i++) {
       final seg = segments[i];
       final chunkFile = chunkFiles[i];
-      final chunkDur = chunkDurations[i];
+      if (!await chunkFile.exists()) continue;
+
+      final chunkRawBytes = await chunkFile.readAsBytes();
+      if (chunkRawBytes.length <= 44) continue;
+
+      // Extract raw 16-bit PCM samples without 44-byte WAV header
+      final chunkPcm = chunkRawBytes.sublist(44);
+      final chunkSampleCount = chunkPcm.length ~/ bytesPerSample;
 
       final targetStart = (seg.startSeconds + syncDelaySeconds)
           .clamp(0.0, totalDurationSeconds);
+      final startSample = (targetStart * sampleRate).round();
+      if (startSample >= totalSamples) continue;
 
-      // If targetStart is ahead of current timeline position, insert silence gap instantly
-      if (targetStart > currentTimelinePos) {
-        final gap = targetStart - currentTimelinePos;
-        if (gap >= 0.03) {
-          final silFile = File('${tempDir.path}/sil_${timestamp}_$i.wav');
-          await _generateSilenceFile(gap, silFile.path);
-          if (await silFile.exists()) {
-            timelinePlaylist.add(silFile);
-          }
-        }
-        currentTimelinePos = targetStart;
-      }
-
-      timelinePlaylist.add(chunkFile);
-      currentTimelinePos += chunkDur;
-    }
-
-    // Trailing silence to match full video length
-    if (totalDurationSeconds > currentTimelinePos) {
-      final tailGap = totalDurationSeconds - currentTimelinePos;
-      if (tailGap >= 0.05) {
-        final tailFile = File('${tempDir.path}/tail_$timestamp.wav');
-        await _generateSilenceFile(tailGap, tailFile.path);
-        if (await tailFile.exists()) {
-          timelinePlaylist.add(tailFile);
+      // Calculate max samples available before the next line begins
+      int maxAvailableSamples = totalSamples - startSample;
+      if (i + 1 < segments.length) {
+        final nextStart = (segments[i + 1].startSeconds + syncDelaySeconds)
+            .clamp(0.0, totalDurationSeconds);
+        final nextStartSample = (nextStart * sampleRate).round();
+        if (nextStartSample > startSample) {
+          maxAvailableSamples = nextStartSample - startSample;
         }
       }
+
+      final copySamples = chunkSampleCount <= maxAvailableSamples
+          ? chunkSampleCount
+          : maxAvailableSamples;
+
+      final masterStartByte = startSample * bytesPerSample;
+      final bytesToCopy = copySamples * bytesPerSample;
+
+      // If truncated to avoid overlapping next speaker, apply smooth 25ms micro-fade
+      if (copySamples < chunkSampleCount && copySamples > 600) {
+        const fadeSamples = 600; // 25ms at 24kHz
+        final fadeStartSample = copySamples - fadeSamples;
+        final bd =
+            ByteData.view(chunkPcm.buffer, chunkPcm.offsetInBytes, bytesToCopy);
+        for (int s = 0; s < fadeSamples; s++) {
+          final sampleIdx = fadeStartSample + s;
+          final originalVal =
+              bd.getInt16(sampleIdx * bytesPerSample, Endian.little);
+          final factor = (fadeSamples - s) / fadeSamples;
+          final fadedVal = (originalVal * factor).round().clamp(-32768, 32767);
+          bd.setInt16(sampleIdx * bytesPerSample, fadedVal, Endian.little);
+        }
+      }
+
+      if (masterStartByte + bytesToCopy <= totalPcmBytes) {
+        masterPcm.setRange(
+          masterStartByte,
+          masterStartByte + bytesToCopy,
+          chunkPcm.sublist(0, bytesToCopy),
+        );
+      }
     }
 
-    // Fast-concatenate playlist with multi-threaded FFmpeg
-    final durLimit = totalDurationSeconds.toStringAsFixed(2);
+    // Write master timeline WAV file with standard 44-byte RIFF header
+    final masterWavFile = File('${tempDir.path}/master_timeline_$timestamp.wav');
+    final totalFileSize = 36 + totalPcmBytes;
+    final masterWavBytes = Uint8List(44 + totalPcmBytes);
+    final bd = ByteData.view(masterWavBytes.buffer);
+
+    // RIFF chunk descriptor
+    masterWavBytes.setRange(0, 4, 'RIFF'.codeUnits);
+    bd.setUint32(4, totalFileSize, Endian.little);
+    masterWavBytes.setRange(8, 12, 'WAVE'.codeUnits);
+
+    // fmt subchunk
+    masterWavBytes.setRange(12, 16, 'fmt '.codeUnits);
+    bd.setUint32(16, 16, Endian.little);
+    bd.setUint16(20, 1, Endian.little); // PCM
+    bd.setUint16(22, channels, Endian.little);
+    bd.setUint32(24, sampleRate, Endian.little);
+    bd.setUint32(
+        28, sampleRate * channels * bytesPerSample, Endian.little); // 48000
+    bd.setUint16(32, channels * bytesPerSample, Endian.little); // 2
+    bd.setUint16(34, 16, Endian.little); // 16 bits
+
+    // data subchunk
+    masterWavBytes.setRange(36, 40, 'data'.codeUnits);
+    bd.setUint32(40, totalPcmBytes, Endian.little);
+
+    // Copy raw master PCM data
+    masterWavBytes.setRange(44, 44 + totalPcmBytes, masterPcm);
+    await masterWavFile.writeAsBytes(masterWavBytes, flush: true);
+
+    // Fast-encode master WAV to high-quality MP3 with multi-threaded FFmpeg
     final outputFile = File('${tempDir.path}/khmer_voice_$timestamp.mp3');
-    final concatListFile = File('${tempDir.path}/concat_list_$timestamp.txt');
-    final concatContent = timelinePlaylist
-        .map((f) => "file '${f.path.replaceAll(r'\', '/')}'")
-        .join('\n');
-    await concatListFile.writeAsString(concatContent);
-
-    final concatCmd =
-        '-y -threads 0 -f concat -safe 0 -i "${concatListFile.path.replaceAll(r'\', '/')}" -t $durLimit -c:a libmp3lame -b:a 128k -ar 24000 -ac 1 "${outputFile.path.replaceAll(r'\', '/')}"';
-    final session = await FFmpegKit.execute(concatCmd);
+    final mp3Cmd =
+        '-y -threads 0 -i "${masterWavFile.path.replaceAll(r'\', '/')}" -c:a libmp3lame -b:a 128k -ar 24000 -ac 1 "${outputFile.path.replaceAll(r'\', '/')}"';
+    final session = await FFmpegKit.execute(mp3Cmd);
     final returnCode = await session.getReturnCode();
 
     if (ReturnCode.isSuccess(returnCode) &&
@@ -294,11 +346,11 @@ class KhmerTtsService {
       return outputFile.path;
     }
 
-    // Fallback concat with AAC
+    // Fallback to AAC
     final fallbackOutputFile =
         File('${tempDir.path}/khmer_voice_$timestamp.aac');
     final fallbackCmd =
-        '-y -threads 0 -f concat -safe 0 -i "${concatListFile.path.replaceAll(r'\', '/')}" -t $durLimit -c:a aac -b:a 192k "${fallbackOutputFile.path.replaceAll(r'\', '/')}"';
+        '-y -threads 0 -i "${masterWavFile.path.replaceAll(r'\', '/')}" -c:a aac -b:a 192k "${fallbackOutputFile.path.replaceAll(r'\', '/')}"';
     final fallbackSession = await FFmpegKit.execute(fallbackCmd);
     final fallbackReturnCode = await fallbackSession.getReturnCode();
 
@@ -307,8 +359,8 @@ class KhmerTtsService {
       return fallbackOutputFile.path;
     }
 
-    if (await outputFile.exists()) {
-      return outputFile.path;
+    if (await masterWavFile.exists()) {
+      return masterWavFile.path;
     }
 
     return chunkFiles.first.path;
