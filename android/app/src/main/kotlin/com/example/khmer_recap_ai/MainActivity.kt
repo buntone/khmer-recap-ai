@@ -61,20 +61,31 @@ class MainActivity : FlutterActivity() {
                                 values.put(android.provider.MediaStore.Video.Media.IS_PENDING, 0)
                                 contentResolver.update(savedUri, values, null, null)
                             }
-                        }
 
-                        try {
-                            val dcimDir = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DCIM), "KhmerRecap")
-                            if (!dcimDir.exists()) {
-                                dcimDir.mkdirs()
+                            // Query real physical path for playback if available
+                            val realDcimFile = java.io.File(
+                                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DCIM),
+                                "KhmerRecap/$title.mp4"
+                            )
+                            if (realDcimFile.exists()) {
+                                savedFilePath = realDcimFile.absolutePath
                             }
-                            val directFile = java.io.File(dcimDir, "$title.mp4")
-                            if (!directFile.exists() || directFile.length() != srcFile.length()) {
+                        } else {
+                            // Legacy Android (pre-Android 10): copy once and notify media scanner
+                            try {
+                                val dcimDir = java.io.File(
+                                    android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DCIM),
+                                    "KhmerRecap"
+                                )
+                                if (!dcimDir.exists()) {
+                                    dcimDir.mkdirs()
+                                }
+                                val directFile = java.io.File(dcimDir, "$title.mp4")
                                 srcFile.copyTo(directFile, overwrite = true)
-                            }
-                            savedFilePath = directFile.absolutePath
-                            MediaScannerConnection.scanFile(context, arrayOf(directFile.absolutePath), arrayOf("video/mp4"), null)
-                        } catch (_: Exception) {}
+                                savedFilePath = directFile.absolutePath
+                                MediaScannerConnection.scanFile(context, arrayOf(directFile.absolutePath), arrayOf("video/mp4"), null)
+                            } catch (_: Exception) {}
+                        }
 
                         result.success(savedFilePath ?: savedUri?.toString() ?: srcPath)
                     } catch (e: Exception) {

@@ -14,9 +14,9 @@ import 'settings_screen.dart';
 
 enum ProcessingStage {
   idle,
-  analyzingVideo,   // 1. កំពុងវិភាគវីដេអូ (Analyzing Video)
-  writingScript,    // 2. កំពុងសរសេរអត្ថបទសម្រាយ (Writing Khmer Script)
-  generatingVoice,  // 3. កំពុងបំប្លែងសំឡេង (Generating Voice)
+  analyzingVideo, // 1. កំពុងវិភាគវីដេអូ (Analyzing Video)
+  writingScript, // 2. កំពុងសរសេរអត្ថបទសម្រាយ (Writing Khmer Script)
+  generatingVoice, // 3. កំពុងបំប្លែងសំឡេង (Generating Voice)
   mergingAudioVideo // 4. កំពុងបញ្ចូលសំឡេងក្នុងវីដេអូ (Merging Audio & Video)
 }
 
@@ -65,7 +65,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ].request();
     }
 
-    final XFile? video = await _imagePicker.pickVideo(source: ImageSource.gallery);
+    final XFile? video =
+        await _imagePicker.pickVideo(source: ImageSource.gallery);
 
     if (video != null && video.path.isNotEmpty) {
       final path = video.path;
@@ -99,7 +100,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final hasApiKey = widget.settingsService.geminiApiKey.trim().isNotEmpty;
     if (!hasApiKey) {
-      _showSnackbar('សូមកំណត់ Gemini API Key នៅក្នុង Settings ជាមុនសិន ដើម្បីឱ្យ AI បកប្រែភាសាចិនក្នុងវីដេអូ!', isError: true);
+      _showSnackbar(
+          'សូមកំណត់ Gemini API Key នៅក្នុង Settings ជាមុនសិន ដើម្បីឱ្យ AI បកប្រែភាសាចិនក្នុងវីដេអូ!',
+          isError: true);
       _openSettings();
       return;
     }
@@ -107,21 +110,25 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _isProcessing = true;
       _currentStage = ProcessingStage.analyzingVideo;
-      _statusMessage = 'កំពុងរៀបចំ និងបង្រួមវីដេអូសម្រាប់ Gemini AI ពិនិត្យមើលរូបភាព និងអក្សររត់...';
+      _statusMessage =
+          'កំពុងរៀបចំ និងបង្រួមវីដេអូសម្រាប់ Gemini AI ពិនិត្យមើលរូបភាព និងអក្សររត់...';
     });
 
     try {
       // Step 2: Extract visual video / audio for Gemini
-      final mediaPath = await _ffmpegService.prepareMediaForGemini(_selectedVideoPath!);
+      final mediaPath =
+          await _ffmpegService.prepareMediaForGemini(_selectedVideoPath!);
       final mimeType = mediaPath.endsWith('.mp4') ? 'video/mp4' : 'audio/mp3';
 
       // Step 3: Send to Gemini for Chinese Dialogue Translation & Dubbing
       setState(() {
         _currentStage = ProcessingStage.writingScript;
-        _statusMessage = 'Gemini AI កំពុងមើលវីដេអូ អានអក្សររត់ និងបកប្រែសាច់រឿងជាភាសាខ្មែរ...';
+        _statusMessage =
+            'Gemini AI កំពុងមើលវីដេអូ អានអក្សររត់ និងបកប្រែសាច់រឿងជាភាសាខ្មែរ...';
       });
 
-      final geminiService = GeminiRecapService(apiKeys: widget.settingsService.geminiApiKeys);
+      final geminiService =
+          GeminiRecapService(apiKeys: widget.settingsService.geminiApiKeys);
       final duration = _videoMetadata?.durationSeconds ?? 60.0;
 
       final khmerScript = await geminiService.generateKhmerRecapScript(
@@ -133,7 +140,8 @@ class _HomeScreenState extends State<HomeScreen> {
       // Step 4: Khmer TTS Voiceover Generation
       setState(() {
         _currentStage = ProcessingStage.generatingVoice;
-        _statusMessage = 'កំពុងបំប្លែងអត្ថបទទៅជាសំឡេង ${_selectedVoice.displayName}...';
+        _statusMessage =
+            'កំពុងបំប្លែងអត្ថបទទៅជាសំឡេង ${_selectedVoice.displayName}...';
       });
 
       final ttsService = KhmerTtsService(
@@ -151,7 +159,8 @@ class _HomeScreenState extends State<HomeScreen> {
         onProgress: (progress, current, total) {
           if (mounted) {
             setState(() {
-              _statusMessage = 'កំពុងបង្កើតសំឡេងឃ្លាទី $current/$total (${(progress * 100).toInt()}%)...';
+              _statusMessage =
+                  'កំពុងបង្កើតសំឡេងឃ្លាទី $current/$total (${(progress * 100).toInt()}%)...';
             });
           }
         },
@@ -160,18 +169,23 @@ class _HomeScreenState extends State<HomeScreen> {
       // Step 5: Merge final audio with video (audio ducking)
       setState(() {
         _currentStage = ProcessingStage.mergingAudioVideo;
-        _statusMessage = 'កំពុងច្របាច់បញ្ចូលសំឡេងខ្មែរជាមួយវីដេអូ (Audio Ducking: ${(_duckingVolume * 100).toInt()}%)...';
+        _statusMessage =
+            'កំពុងច្របាច់បញ្ចូលសំឡេងខ្មែរជាមួយវីដេអូ (Audio Ducking: ${(_duckingVolume * 100).toInt()}%)...';
       });
 
       final dubbedVideoPath = await _ffmpegService.mergeKhmerVoiceWithVideo(
         originalVideoPath: _selectedVideoPath!,
         khmerAudioPath: khmerAudioPath,
         duckingVolume: _duckingVolume,
+        watermarkText: widget.settingsService.watermarkEnabled
+            ? widget.settingsService.watermarkText
+            : null,
       );
 
       // Auto-save dubbed video directly to phone Gallery (DCIM/KhmerRecap)
       setState(() {
-        _statusMessage = 'កំពុងរក្សាទុកវីដេអូស្វ័យប្រវត្តិចូល Gallery ទូរស័ព្ទ...';
+        _statusMessage =
+            'កំពុងរក្សាទុកវីដេអូស្វ័យប្រវត្តិចូល Gallery ទូរស័ព្ទ...';
       });
 
       String finalGalleryVideoPath = dubbedVideoPath;
@@ -232,7 +246,8 @@ class _HomeScreenState extends State<HomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
-        backgroundColor: isError ? Colors.redAccent.shade700 : const Color(0xFF1E293B),
+        backgroundColor:
+            isError ? Colors.redAccent.shade700 : const Color(0xFF1E293B),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -263,7 +278,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Image.asset(
                   'assets/images/app_logo.png',
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(Icons.movie_filter_rounded, color: Colors.amberAccent, size: 22),
+                  errorBuilder: (_, __, ___) => const Icon(
+                      Icons.movie_filter_rounded,
+                      color: Colors.amberAccent,
+                      size: 22),
                 ),
               ),
             ),
@@ -275,7 +293,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     'Khmer Dubbing Studio',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: Colors.white),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -349,7 +370,8 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: _pickVideoFile,
               borderRadius: BorderRadius.circular(18),
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
                 child: Column(
                   children: [
                     Container(
@@ -358,12 +380,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: Colors.amber.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.video_library_rounded, size: 48, color: Colors.amber),
+                      child: const Icon(Icons.video_library_rounded,
+                          size: 48, color: Colors.amber),
                     ),
                     const SizedBox(height: 16),
                     const Text(
                       'ជ្រើសរើសវីដេអូរឿងកុន (Select Video)',
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 6),
                     const Text(
@@ -377,16 +403,20 @@ class _HomeScreenState extends State<HomeScreen> {
           ] else ...[
             // Video Preview
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(18)),
               child: AspectRatio(
                 aspectRatio: _previewController?.value.aspectRatio ?? 16 / 9,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    if (_previewController != null && _previewController!.value.isInitialized)
+                    if (_previewController != null &&
+                        _previewController!.value.isInitialized)
                       VideoPlayer(_previewController!)
                     else
-                      const Center(child: CircularProgressIndicator(color: Colors.amber)),
+                      const Center(
+                          child:
+                              CircularProgressIndicator(color: Colors.amber)),
                     // Play/Pause Overlay Button
                     IconButton(
                       iconSize: 54,
@@ -417,15 +447,21 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _selectedVideoPath!.split(Platform.pathSeparator).last,
+                          _selectedVideoPath!
+                              .split(Platform.pathSeparator)
+                              .last,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'ប្រវែង: ${_videoMetadata?.durationFormatted ?? "--:--"} | កម្រិត: ${_videoMetadata?.resolutionFormatted ?? "--"}',
-                          style: const TextStyle(color: Colors.amberAccent, fontSize: 11),
+                          style: const TextStyle(
+                              color: Colors.amberAccent, fontSize: 11),
                         ),
                       ],
                     ),
@@ -433,7 +469,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   TextButton.icon(
                     icon: const Icon(Icons.change_circle_outlined, size: 18),
                     label: const Text('ប្តូរវីដេអូ'),
-                    style: TextButton.styleFrom(foregroundColor: Colors.white70),
+                    style:
+                        TextButton.styleFrom(foregroundColor: Colors.white70),
                     onPressed: _pickVideoFile,
                   ),
                 ],
@@ -458,31 +495,43 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           const Row(
             children: [
-              Icon(Icons.record_voice_over_rounded, color: Colors.purpleAccent, size: 20),
+              Icon(Icons.record_voice_over_rounded,
+                  color: Colors.purpleAccent, size: 20),
               SizedBox(width: 8),
               Text(
                 'ជ្រើសរើសសំឡេងអាន',
-                style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          // Featured: Auto Dialogue Switching Card
+          // Featured: Auto Dialogue Switching (Recommended by Default)
           InkWell(
-            onTap: () => setState(() => _selectedVoice = KhmerVoice.autoDialogue),
+            onTap: () =>
+                setState(() => _selectedVoice = KhmerVoice.autoDialogue),
             borderRadius: BorderRadius.circular(14),
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 gradient: _selectedVoice == KhmerVoice.autoDialogue
                     ? LinearGradient(
-                        colors: [Colors.purpleAccent.withValues(alpha: 0.3), Colors.blueAccent.withValues(alpha: 0.3)],
+                        colors: [
+                          Colors.purpleAccent.withValues(alpha: 0.3),
+                          Colors.blueAccent.withValues(alpha: 0.3)
+                        ],
                       )
                     : null,
-                color: _selectedVoice == KhmerVoice.autoDialogue ? null : const Color(0xFF0F172A),
+                color: _selectedVoice == KhmerVoice.autoDialogue
+                    ? null
+                    : const Color(0xFF0F172A),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: _selectedVoice == KhmerVoice.autoDialogue ? Colors.purpleAccent : Colors.white12,
+                  color: _selectedVoice == KhmerVoice.autoDialogue
+                      ? Colors.purpleAccent
+                      : Colors.white12,
                   width: 1.5,
                 ),
               ),
@@ -494,7 +543,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: Colors.purpleAccent.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.auto_awesome, color: Colors.purpleAccent, size: 24),
+                    child: const Icon(Icons.auto_awesome,
+                        color: Colors.purpleAccent, size: 24),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -506,29 +556,38 @@ class _HomeScreenState extends State<HomeScreen> {
                             const Flexible(
                               child: Text(
                                 '🎭 ឆ្លាស់សំឡេង (ប្រុស & ស្រី)',
-                                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             const SizedBox(width: 6),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
                                 color: Colors.amber,
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: const Text(
                                 'ណែនាំ',
-                                style: TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold),
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'សំឡេងស្រីមុំ & សំឡេងប្រសិទ្ធឆ្លាស់គ្នា',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11),
+                          'សំឡេងស្រីមុំ & ប្រសិទ្ធ ឆ្លាស់គ្នាតាមតួអង្គ និងគិតក្នុងចិត្ត',
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 11),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -536,8 +595,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   Icon(
-                    _selectedVoice == KhmerVoice.autoDialogue ? Icons.check_circle_rounded : Icons.circle_outlined,
-                    color: _selectedVoice == KhmerVoice.autoDialogue ? Colors.purpleAccent : Colors.white30,
+                    _selectedVoice == KhmerVoice.autoDialogue
+                        ? Icons.check_circle_rounded
+                        : Icons.circle_outlined,
+                    color: _selectedVoice == KhmerVoice.autoDialogue
+                        ? Colors.purpleAccent
+                        : Colors.white30,
                   ),
                 ],
               ),
@@ -549,28 +612,36 @@ class _HomeScreenState extends State<HomeScreen> {
               // Male - Prasith
               Expanded(
                 child: InkWell(
-                  onTap: () => setState(() => _selectedVoice = KhmerVoice.prasith),
+                  onTap: () =>
+                      setState(() => _selectedVoice = KhmerVoice.prasith),
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                     decoration: BoxDecoration(
                       color: _selectedVoice == KhmerVoice.prasith
                           ? Colors.blueAccent.withValues(alpha: 0.2)
                           : const Color(0xFF0F172A),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: _selectedVoice == KhmerVoice.prasith ? Colors.blueAccent : Colors.white12,
+                        color: _selectedVoice == KhmerVoice.prasith
+                            ? Colors.blueAccent
+                            : Colors.white12,
                         width: 1.5,
                       ),
                     ),
                     child: Column(
                       children: [
-                        const Icon(Icons.record_voice_over, color: Colors.blueAccent, size: 22),
+                        const Icon(Icons.record_voice_over,
+                            color: Colors.blueAccent, size: 22),
                         const SizedBox(height: 6),
                         const Text(
                           'ប្រសិទ្ធ (ប្រុស)',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -578,7 +649,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(
                           'ទឹកដមរស់រវើក ជក់ចិត្ត',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10),
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 10),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -591,28 +664,36 @@ class _HomeScreenState extends State<HomeScreen> {
               // Female - Sreymom
               Expanded(
                 child: InkWell(
-                  onTap: () => setState(() => _selectedVoice = KhmerVoice.sreymom),
+                  onTap: () =>
+                      setState(() => _selectedVoice = KhmerVoice.sreymom),
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                     decoration: BoxDecoration(
                       color: _selectedVoice == KhmerVoice.sreymom
                           ? Colors.pinkAccent.withValues(alpha: 0.2)
                           : const Color(0xFF0F172A),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: _selectedVoice == KhmerVoice.sreymom ? Colors.pinkAccent : Colors.white12,
+                        color: _selectedVoice == KhmerVoice.sreymom
+                            ? Colors.pinkAccent
+                            : Colors.white12,
                         width: 1.5,
                       ),
                     ),
                     child: Column(
                       children: [
-                        const Icon(Icons.record_voice_over, color: Colors.pinkAccent, size: 22),
+                        const Icon(Icons.record_voice_over,
+                            color: Colors.pinkAccent, size: 22),
                         const SizedBox(height: 6),
                         const Text(
                           'ស្រីមុំ (ស្រី)',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -620,7 +701,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(
                           'ពិរោះ រណ្ដំ ស្រទន់',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10),
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 10),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -659,7 +742,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Row(
                   children: [
                     Icon(
-                      isMuted ? Icons.volume_off_rounded : Icons.volume_down_rounded,
+                      isMuted
+                          ? Icons.volume_off_rounded
+                          : Icons.volume_down_rounded,
                       color: isMuted ? Colors.greenAccent : Colors.tealAccent,
                       size: 20,
                     ),
@@ -667,7 +752,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Expanded(
                       child: Text(
                         'កម្រិតសំឡេងចិនដើម',
-                        style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -679,7 +767,9 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: isMuted ? Colors.greenAccent.withValues(alpha: 0.15) : Colors.tealAccent.withValues(alpha: 0.15),
+                  color: isMuted
+                      ? Colors.greenAccent.withValues(alpha: 0.15)
+                      : Colors.tealAccent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -714,21 +804,30 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               TextButton.icon(
                 onPressed: () => setState(() => _duckingVolume = 0.0),
-                icon: const Icon(Icons.volume_mute_rounded, size: 16, color: Colors.greenAccent),
+                icon: const Icon(Icons.volume_mute_rounded,
+                    size: 16, color: Colors.greenAccent),
                 label: const FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
                     'បិទសំឡេងចិន (0% Mute)',
-                    style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        color: Colors.greenAccent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  backgroundColor: isMuted ? Colors.greenAccent.withValues(alpha: 0.1) : Colors.white10,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  backgroundColor: isMuted
+                      ? Colors.greenAccent.withValues(alpha: 0.1)
+                      : Colors.white10,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                 ),
               ),
-              const Text('100% (សំឡេងពេញ)', style: TextStyle(color: Colors.white38, fontSize: 10)),
+              const Text('100% (សំឡេងពេញ)',
+                  style: TextStyle(color: Colors.white38, fontSize: 10)),
             ],
           ),
         ],
@@ -758,19 +857,25 @@ class _HomeScreenState extends State<HomeScreen> {
           shadowColor: Colors.transparent,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
         onPressed: _isProcessing ? null : _startRecapPipeline,
         child: _isProcessing
             ? const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)),
+                  SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: Colors.white)),
                   SizedBox(width: 12),
                   Flexible(
                     child: Text(
                       'កំពុងដំណើរការបកប្រែ និងបញ្ចូលសំឡេង...',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -786,7 +891,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       fit: BoxFit.scaleDown,
                       child: Text(
                         'បង្កើតវីដេអូបកប្រែ និងបញ្ចូលសំឡេង',
-                        style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            fontSize: 14.5, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -809,24 +915,37 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Row(
             children: [
-              const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amberAccent)),
+              const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.amberAccent)),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   _statusMessage,
-                  style: const TextStyle(color: Colors.amberAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                      color: Colors.amberAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          _buildStageRow(1, 'កំពុងវិភាគវីដេអូ (Analyzing Video)', ProcessingStage.analyzingVideo),
+          _buildStageRow(1, 'កំពុងវិភាគវីដេអូ (Analyzing Video)',
+              ProcessingStage.analyzingVideo),
           const SizedBox(height: 10),
-          _buildStageRow(2, 'កំពុងបកប្រែការសន្ទនា (Translating Dialogue)', ProcessingStage.writingScript),
+          _buildStageRow(2, 'កំពុងបកប្រែការសន្ទនា (Translating Dialogue)',
+              ProcessingStage.writingScript),
           const SizedBox(height: 10),
-          _buildStageRow(3, 'កំពុងបំប្លែងសំឡេង (Generating Voice)', ProcessingStage.generatingVoice),
+          _buildStageRow(3, 'កំពុងបំប្លែងសំឡេង (Generating Voice)',
+              ProcessingStage.generatingVoice),
           const SizedBox(height: 10),
-          _buildStageRow(4, 'កំពុងបញ្ចូលសំឡេងក្នុងវីដេអូ (Merging Audio & Video)', ProcessingStage.mergingAudioVideo),
+          _buildStageRow(
+              4,
+              'កំពុងបញ្ចូលសំឡេងក្នុងវីដេអូ (Merging Audio & Video)',
+              ProcessingStage.mergingAudioVideo),
         ],
       ),
     );
@@ -855,7 +974,9 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Text(
             '$step. $label',
             style: TextStyle(
-              color: isCurrent ? Colors.white : (isDone ? Colors.white70 : Colors.white30),
+              color: isCurrent
+                  ? Colors.white
+                  : (isDone ? Colors.white70 : Colors.white30),
               fontSize: 12,
               fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
             ),

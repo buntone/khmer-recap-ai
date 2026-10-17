@@ -9,11 +9,14 @@ class SettingsService {
   static const String keyVoiceSreymomId = 'voice_sreymom_id';
   static const String keyDefaultDucking = 'default_ducking_volume';
   static const String keyAudioSyncDelay = 'audio_sync_delay_ms';
+  static const String keyWatermarkEnabled = 'watermark_enabled';
+  static const String keyWatermarkText = 'watermark_text';
 
   // Default values
   static const String defaultTtsEndpoint = 'https://api.khmervoice.ai/v1/tts';
   static const String defaultPrasithId = 'km-KH-PisethNeural';
   static const String defaultSreymomId = 'km-KH-SreymomNeural';
+  static const String defaultWatermarkText = 'ដោយ.B.T.movie';
 
   final SharedPreferences _prefs;
 
@@ -46,7 +49,11 @@ class SettingsService {
   List<String> get geminiApiKeys {
     final stored = _prefs.getStringList(keyGeminiApiKeys);
     if (stored != null && stored.isNotEmpty) {
-      final clean = stored.map((k) => k.trim()).where((k) => k.isNotEmpty).toSet().toList();
+      final clean = stored
+          .map((k) => k.trim())
+          .where((k) => k.isNotEmpty)
+          .toSet()
+          .toList();
       return clean;
     }
     final single = _prefs.getString(keyGeminiApiKey)?.trim() ?? '';
@@ -57,7 +64,8 @@ class SettingsService {
   }
 
   set geminiApiKeys(List<String> keys) {
-    final clean = keys.map((k) => k.trim()).where((k) => k.isNotEmpty).toSet().toList();
+    final clean =
+        keys.map((k) => k.trim()).where((k) => k.isNotEmpty).toSet().toList();
     _prefs.setStringList(keyGeminiApiKeys, clean);
     if (clean.isNotEmpty) {
       _prefs.setString(keyGeminiApiKey, clean.first);
@@ -89,22 +97,34 @@ class SettingsService {
     geminiApiKeys = current;
   }
 
-  String get ttsEndpoint => _prefs.getString(keyTtsEndpoint) ?? defaultTtsEndpoint;
+  String get ttsEndpoint =>
+      _prefs.getString(keyTtsEndpoint) ?? defaultTtsEndpoint;
   set ttsEndpoint(String val) => _prefs.setString(keyTtsEndpoint, val);
 
   String get ttsApiToken => _prefs.getString(keyTtsApiToken) ?? '';
   set ttsApiToken(String val) => _prefs.setString(keyTtsApiToken, val);
 
-  String get voicePrasithId => _prefs.getString(keyVoicePrasithId) ?? defaultPrasithId;
+  String get voicePrasithId =>
+      _prefs.getString(keyVoicePrasithId) ?? defaultPrasithId;
   set voicePrasithId(String val) => _prefs.setString(keyVoicePrasithId, val);
 
-  String get voiceSreymomId => _prefs.getString(keyVoiceSreymomId) ?? defaultSreymomId;
+  String get voiceSreymomId =>
+      _prefs.getString(keyVoiceSreymomId) ?? defaultSreymomId;
   set voiceSreymomId(String val) => _prefs.setString(keyVoiceSreymomId, val);
 
   double get defaultDuckingVolume => _prefs.getDouble(keyDefaultDucking) ?? 0.0;
-  set defaultDuckingVolume(double val) => _prefs.setDouble(keyDefaultDucking, val);
+  set defaultDuckingVolume(double val) =>
+      _prefs.setDouble(keyDefaultDucking, val);
 
   /// Delay in seconds to shift audio forward/backward to align with mouth movements (default 0.0s)
   double get audioSyncDelay => _prefs.getDouble(keyAudioSyncDelay) ?? 0.0;
   set audioSyncDelay(double val) => _prefs.setDouble(keyAudioSyncDelay, val);
+
+  /// Moving watermark text overlay on generated video (e.g. "ដោយ.B.T.movie")
+  bool get watermarkEnabled => _prefs.getBool(keyWatermarkEnabled) ?? true;
+  set watermarkEnabled(bool val) => _prefs.setBool(keyWatermarkEnabled, val);
+
+  String get watermarkText =>
+      _prefs.getString(keyWatermarkText) ?? defaultWatermarkText;
+  set watermarkText(String val) => _prefs.setString(keyWatermarkText, val.trim());
 }

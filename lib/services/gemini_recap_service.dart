@@ -17,7 +17,8 @@ class GeminiRecapService {
   /// to discover the exact models active and supported for the given API key.
   Future<List<String>> _discoverAvailableModels(String cleanKey) async {
     try {
-      final uri = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$cleanKey');
+      final uri = Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models?key=$cleanKey');
       final resp = await http.get(uri).timeout(const Duration(seconds: 10));
 
       if (resp.statusCode == 200) {
@@ -91,7 +92,8 @@ class GeminiRecapService {
     String? tonePreference,
   }) async {
     if (apiKeys.isEmpty) {
-      throw Exception('សូមកំណត់ Gemini API Key យ៉ាងហោចណាស់ ១ នៅក្នុង Settings ជាមុនសិន!');
+      throw Exception(
+          'សូមកំណត់ Gemini API Key យ៉ាងហោចណាស់ ១ នៅក្នុង Settings ជាមុនសិន!');
     }
 
     final file = File(mediaPath);
@@ -101,52 +103,66 @@ class GeminiRecapService {
 
     final bytes = await file.readAsBytes();
 
-    final durationMinutes = (videoDurationSeconds ~/ 60).toString().padLeft(2, '0');
-    final durationSecs = (videoDurationSeconds.toInt() % 60).toString().padLeft(2, '0');
+    final durationMinutes =
+        (videoDurationSeconds ~/ 60).toString().padLeft(2, '0');
+    final durationSecs =
+        (videoDurationSeconds.toInt() % 60).toString().padLeft(2, '0');
     final durationFormatted = '$durationMinutes:$durationSecs';
 
     final promptText = '''
 អ្នកគឺជាអ្នកជំនាញបកប្រែ និងបញ្ចូលសំឡេងភាពយន្តចិន-ខ្មែរអាជីព (Professional Chinese-to-Khmer Movie Dubbing Specialist)។
 ភារកិច្ចចម្បងរបស់អ្នក៖
 ១. **ពិនិត្យមើលវីដេអូ អានអក្សររត់ពីក្រោម (Subtitles) ភាសាចិនលើផ្ទាំងរូបភាព និងស្ដាប់ការសន្ទនារបស់តួអង្គឱ្យបានច្បាស់លាស់ ១០០%**។
-២. **បកប្រែសាច់រឿង និងការសន្ទនាជាភាសាខ្មែរ ដោយកត់ត្រាពេលវេលា [MM:SS] ឱ្យចំពេលដែលតួអង្គនិយាយ ឬពេលឈុតឆាកកើតឡើងជាក់ស្ដែង**។
+២. **បកប្រែសាច់រឿង ការសម្រាយរឿង និងការសន្ទនាជាភាសាខ្មែរ ដោយកត់ត្រាពេលវេលា [MM:SS] ឱ្យចំពេលដែលឈុតឆាកកើតឡើងជាក់ស្ដែង**។
 
 🎥 ព័ត៌មានវីដេអូ៖
 - រយៈពេលវីដេអូសរុប៖ $durationFormatted (${videoDurationSeconds.toStringAsFixed(1)} វិនាទី)
 
-🎯 គោលការណ៍កំណត់ពេលវេលា និងបកប្រែ (CRITICAL RULES):
-១. **ចំនួនបន្ទាត់ និងប្រវែងប្រយោគខ្លីល្មមសមរម្យ (Concise Dialogue - 5 to 10 Lines per minute)**:
-   - ត្រូវបកប្រែជាប្រយោគខ្លីល្មម ធម្មជាតិ ស្ដាប់ទៅពីរោះរអិល ដូចអ្នកបញ្ចូលសំឡេងរឿងកុនអាជីព។
-   - ហាមដាច់ខាតកុំសរសេរប្រយោគវែងអូសបន្លាយជ្រុល! ត្រូវសរសេរខ្លីល្មមឱ្យសមស្របតាមរយៈពេលនៃឈុតឆាក ដើម្បីឱ្យសំឡេងអានបញ្ចប់ទាន់ពេលវេលា មុនពេលតួអង្គបន្ទាប់និយាយ។
-   - បើសិនជាតួអង្គម្នាក់និយាយ ២-៣ ឃ្លាក្នុងឈុតតែមួយ ត្រូវសរសេរចូលគ្នាក្នុងបន្ទាត់តែមួយ។
+🎯 គោលការណ៍កំណត់ពេលវេលា និងបកប្រែ (CRITICAL RULES - STRICT ANTI-OVERLAP & RECAP DUBBING):
 
-២. **ពេលវេលា [MM:SS] ត្រឹមត្រូវតាមនាទីវិនាទីជាក់ស្ដែង (Accurate Scene Timestamps)**:
-   - ត្រូវកត់ត្រា [MM:SS] ឬ [MM:SS - MM:SS] ឱ្យចំពេលដែលតួអង្គចាប់ផ្ដើមនិយាយពិតប្រាកដ។
-   - បើនៅដើមវីដេអូ (ឧទាហរណ៍ ០ ដល់ ៤ វិនាទី) មានភ្លេង ឬតួអង្គមិនទាន់និយាយទេ ហាមដាច់ខាតកុំដាក់ [00:00]! ត្រូវដាក់ពេលវេលាដែលតួអង្គចាប់ផ្ដើមនិយាយជាក់ស្ដែង (ឧទាហរណ៍៖ [00:04])។
-   - ពេលណាដែលគ្មានការនិយាយ (ចន្លោះស្ងាត់ ឬភ្លេង) មិនត្រូវដាក់អត្ថបទឡើយ ដើម្បីកុំឱ្យសំឡេងនិយាយមុនសាច់រឿង។
+១. **សម្រាយសាច់រឿងនៅដើមវីដេអូ (STORY RECAP / INTRO NARRATION)**:
+   - វីដេអូភាពយន្តជាច្រើនតែងតែមានការរៀបរាប់ ឬ**សម្រាយសាច់រឿងនៅដើមវីដេអូ (Intro Voiceover / Recap)** ដើម្បីពន្យល់ពីដើមហេតុ ឬសាច់រឿងសង្ខេប។
+   - **ត្រូវតែបកប្រែ និងចាប់ផ្ដើមអានតាំងពីដើមវីដេអូ [00:01] មកភ្លាម! ហាមដាច់ខាតកុំទុកឱ្យស្ងាត់!**
+   - ប្រើស្លាក [ប្រុស]: សម្រាប់អ្នកសម្រាយសាច់រឿង (ឧទាហរណ៍៖ [00:01] [ប្រុស]: សម្រាយសាច់រឿង...)។
 
-៣. **ហៅឈ្មោះ និងសព្វនាមញាតិមិត្តឱ្យចំៗ (STRICT KINSHIP & FAMILY ADDRESSING - ហៅឈ្មោះ ពុកម៉ែ មាមីង យាយតា បងប្អូន ឱ្យចំៗ)**:
-   - ត្រូវបកប្រែពាក្យហៅញាតិសន្តានចិនឱ្យចេញជាពាក្យខ្មែរចំៗ និងត្រឹមត្រូវ ១០០% តាមសាច់រឿង ហាមកាត់ចោល ឬប្រើពាក្យទូទៅ (ដូចជា "អ្នក", "នាង", "គាត់"):
-     * ឪពុក/ម្តាយ (爸/妈/父亲/母亲/爹/娘): ត្រូវហៅ "ពុក", "ម៉ែ", "ប៉ា", "ម៉ាក់", "ឪពុក", ឬ "ម្ដាយ" ឱ្យចំៗ!
-     * ជីដូន/ជីតា (爷爷/奶奶/外公/外婆/姥姥/姥爷): ត្រូវហៅ "លោកតា", "លោកយាយ", "តា", ឬ "យាយ" ឱ្យចំៗ!
-     * ពូមីង/អ៊ំ/មាមីង (叔叔/阿姨/舅舅/姑姑/婶婶/伯父/伯母): ត្រូវហៅ "ពូ", "មីង", "មាមីង", ឬ "អ៊ំ" ឱ្យចំៗ!
-     * បងប្អូន/ប្ដីប្រពន្ធ (哥/姐/弟/妹/老公/老婆): ត្រូវហៅ "បង", "ប្អូន", "បងប្រុស", "បងស្រី", "ប្អូនប្រុស", "ប្អូនស្រី", "ប្តី", "ប្រពន្ធ" ឱ្យចំៗ!
-     * កូន/ចៅ (儿子/女儿/孩子/孙子/孙女/外孙): ត្រូវហៅ "កូន", "កូនប្រុស", "កូនស្រី", ឬ "ចៅ" ឱ្យចំៗ!
-   - ពេលតួអង្គនិយាយឆ្លើយឆ្លងគ្នា ត្រូវរក្សាសព្វនាមគោរព និងស្និទ្ធស្នាលតាមទំនាក់ទំនងគ្រួសារជាក់ស្តែងជានិច្ច!
+២. **មនុស្សនិយាយក្នុងចិត្ត / គិតក្នុងចិត្ត (INNER MONOLOGUE / CHARACTER THOUGHTS - ត្រូវតែចាប់ភេទឱ្យចំ ១០០%)**:
+   - ក្នុងឈុតឆាកភាពយន្តមួយចំនួន តួអង្គមិនកម្រើកមាត់ទេ ប៉ុន្តែគាត់កំពុង**និយាយក្នុងចិត្ត គិតក្នុងចិត្ត ឬមានពាក្យសារក្នុងចិត្ត** (ឧទាហរណ៍៖ អក្សររត់ចិនដាក់ក្នុងវង់ក្រចក (内心/心想/独白) ឬមានសំឡេងបន្លឺឡើងក្នុងចិត្តរបស់តួអង្គ)។
+   - **ត្រូវតែបកប្រែពាក្យក្នុងចិត្តនេះ និងកំណត់ Timestamp [MM:SS] ឱ្យអានសំឡេងខ្មែរចេញមក ហាមដាច់ខាតកុំកាត់ចោល!**
+   - **សំខាន់បំផុត៖ ត្រូវកំណត់ភេទឱ្យចំថាអ្នកណាជាអ្នកគិតក្នុងចិត្ត៖**
+     * **បើសិនជាតួប្រុសគិតក្នុងចិត្ត** ត្រូវតែដាក់ស្លាក **[ប្រុស]: (ក្នុងចិត្ត) ...** (ដើម្បីឱ្យចេញសំឡេងប្រុស)
+     * **បើសិនជាតួស្រីគិតក្នុងចិត្ត** ត្រូវតែដាក់ស្លាក **[ស្រី]: (ក្នុងចិត្ត) ...** (ដើម្បីឱ្យចេញសំឡេងស្រី)
 
-៤. **កំណត់ភេទតួអង្គ (STRICT TAGS - ONLY USE [ប្រុស]: OR [ស្រី]:)**:
-   - ត្រូវពិនិត្យមើលរូបភាពតួអង្គដែលកំពុងកម្រើកមាត់និយាយ ឬស្ដាប់សំនៀងសំឡេងឱ្យច្បាស់លាស់បំផុត៖
-   - ហាមដាច់ខាតកុំប្រើពាក្យ [ស្រីចាស់]:, [ប្រុសចាស់]:, [យាយ]:, [តា]:, [ម៉ាក់]:, [កូន]: ឬឈ្មោះតួអង្គផ្សេងៗនៅពីមុខឃ្លា!
-   - ត្រូវប្រើតែ ២ ម៉ាត់នេះគត់នៅពីមុខឃ្លានីមួយៗ៖
-     * [ប្រុស]: សម្រាប់តួអង្គប្រុស ឬមនុស្សប្រុសនិយាយ
-     * [ស្រី]: សម្រាប់តួអង្គស្រី ឬមនុស្សស្រីនិយាយ
-   - ហាមដាច់ខាតកុំច្រឡំភេទតួអង្គ ជាពិសេសនៅចុងវីដេអូ ត្រូវមើលឱ្យច្បាស់ថាតួអង្គប្រុស ឬតួអង្គស្រីជាអ្នកនិយាយ។
+៣. **១ បន្ទាត់ សម្រាប់តួអង្គតែ ១ នាក់គត់ (STRICT SINGLE SPEAKER PER LINE)**:
+   - ហាមដាច់ខាតកុំដាក់ [ប្រុស] និង [ស្រី] ក្នុងបន្ទាត់តែមួយ!
+   - បើសិនជាតួប្រុស និងតួស្រីនិយាយឆ្លើយឆ្លងគ្នា ត្រូវចុះបន្ទាត់ថ្មីដាច់ដោយឡែកពីគ្នាជានិច្ច ជាមួយ Timestamp រៀងៗខ្លួន។
 
-៥. **ទម្រង់លទ្ធផល (STRICT PLAIN TEXT OUTPUT - NO JSON, NO MARKDOWN CODE BLOCKS)**:
+៤. **ប្រយោគខ្លីខ្លឹមល្មមសមស្របតាមវិនាទី (ULTRA-CONCISE DIALOGUE - ហាមសរសេរវែងអូសបន្លាយ)**:
+   - ក្នុង ១ វិនាទី សំឡេងអានបានប្រហែល ៣ ទៅ ៤ ម៉ាត់ប៉ុណ្ណោះ។ បើសិនជាឈុតឆាកមានត្រឹមតែ ៣ វិនាទី ត្រូវបកប្រែប្រយោគខ្លីល្មមត្រឹម ៧ ទៅ ១០ ម៉ាត់ប៉ុណ្ណោះ!
+   - ហាមដាច់ខាតកុំសរសេរប្រយោគវែងៗអូសបន្លាយ! ត្រូវតែសរសេរឱ្យខ្លីល្មម ដើម្បីឱ្យសំឡេងអានចប់ទាន់ពេលវេលា មុនពេលតួអង្គបន្ទាប់ចាប់ផ្ដើមនិយាយ។
+   - មិនត្រូវបន្ថែមពាក្យពន្យល់វែងអន្លាយដែលគ្មានក្នុងសាច់រឿងឡើយ។
+
+៥. **ពេលវេលា [MM:SS] ត្រឹមត្រូវតាមនាទីវិនាទីជាក់ស្ដែង (Accurate Scene Timestamps)**:
+   - ត្រូវកត់ត្រា [MM:SS] ឱ្យចំពេលដែលតួអង្គចាប់ផ្ដើមនិយាយ ឬពេលសម្រាយសាច់រឿងចាប់ផ្ដើម។
+   - បើនៅដើមវីដេអូមានសម្រាយសាច់រឿង ឬការគិតក្នុងចិត្ត ត្រូវដាក់ [00:01] ភ្លាម ដើម្បីឱ្យមានសំឡេងនិយាយតាំងពីដើមវីដេអូ។
+   - រវាងបន្ទាត់មួយទៅបន្ទាត់មួយ ត្រូវទុកចន្លោះយ៉ាងតិច ២ ទៅ ៣ វិនាទី (ហាមដាក់ Timestamp ជិតគ្នាពេក ដូចជា [00:04] និង [00:05])។
+
+៦. **ហៅឈ្មោះ និងសព្វនាមញាតិមិត្តឱ្យចំៗ (STRICT KINSHIP & FAMILY ADDRESSING)**:
+   - ត្រូវបកប្រែពាក្យហៅញាតិសន្តានចិនឱ្យចេញជាពាក្យខ្មែរចំៗ និងត្រឹមត្រូវ ១០០% តាមសាច់រឿង៖ ពុក, ម៉ែ, ប៉ា, ម៉ាក់, លោកតា, លោកយាយ, ពូ, មីង, បង, ប្អូន, ប្ដី, ប្រពន្ធ, កូន, ចៅ ឱ្យចំៗ!
+
+៧. **កំណត់ស្លាកសំឡេងស្វ័យប្រវត្តិតាមភេទតួអង្គ (STRICT AUTO-GENDER SPEAKER TAGS)**:
+   - **រាល់បន្ទាត់ទាំងអស់ ដាច់ខាតត្រូវតែមានស្លាក [ប្រុស]: ឬ [ស្រី]: នៅខាងមុខជានិច្ច ហាមដាច់ខាតកុំចោលបន្ទាត់ណាដោយគ្មានស្លាក!**
+   - **[ប្រុស]:** សម្រាប់តួអង្គប្រុសនិយាយផ្ទាល់, តួអង្គប្រុសគិតក្នុងចិត្ត `[ប្រុស]: (ក្នុងចិត្ត)`, និងអ្នកសម្រាយរឿង។
+   - **[ស្រី]:** សម្រាប់តួអង្គស្រីនិយាយផ្ទាល់, និងតួអង្គស្រីគិតក្នុងចិត្ត `[ស្រី]: (ក្នុងចិត្ត)`។
+   - ហាមដាច់ខាតកុំច្រឡំភេទ៖ ប្រុសនិយាយត្រូវតែ [ប្រុស] ស្រីនិយាយត្រូវតែ [ស្រី] ប្រុសគិតត្រូវតែ [ប្រុស] ស្រីគិតត្រូវតែ [ស្រី]។
+
+៨. **ទម្រង់លទ្ធផល (STRICT PLAIN TEXT OUTPUT - NO JSON, NO MARKDOWN CODE BLOCKS)**:
 សូមសរសេរចេញមកជាបន្ទាត់ៗផ្ទាល់ ដោយមិនប្រើ JSON ឬ Markdown code block ឡើយ៖
-[00:04] [ប្រុស]: ពុកម៉ែ! ហេតុអ្វីបានជាពុកម៉ែមកទីនេះ?
+[00:01] [ប្រុស]: សម្រាយសាច់រឿង៖ បីឆ្នាំមុន នាងត្រូវបានគេបណ្តេញចេញពីត្រកូល។
+[00:06] [ស្រី]: (ក្នុងចិត្ត) ថ្ងៃនេះខ្ញុំត្រលប់មកវិញ ដើម្បីទាមទារភាពយុត្តិធម៌!
 [00:11] [ស្រី]: កូន! ម៉ែមកដើម្បីយករបស់របរឱ្យកូនវិញ។
-[00:19] [ប្រុស]: លោកយាយលោកតា និងមាមីងទាំងអស់គ្នា ក៏បារម្ភពីកូនដែរ!
+[00:16] [ប្រុស]: (ក្នុងចិត្ត) ហេតុអ្វីបានជាម៉ែមកទីនេះនៅពេលនេះ?
+[00:20] [ប្រុស]: ម៉ែ! កូនជាប់រវល់ការងារនៅទីនេះ។
+[00:25] [ប្រុស]: ម៉ែកុំបារម្ភអី កូនដឹងខ្លួនឯងច្បាស់ហើយ!
 ''';
 
     final normalizedMime = mimeType == 'audio/mpeg' ? 'audio/mp3' : mimeType;
@@ -215,7 +231,8 @@ class GeminiRecapService {
       if (lastError != null) {
         throw Exception('Gemini AI បរាជ័យក្នុងការបកប្រែ: $lastError');
       }
-      throw Exception('មិនអាចចាប់សំឡេងសន្ទនាភាសាចិនក្នុងវីដេអូដើម្បីបកប្រែបានឡើយ។');
+      throw Exception(
+          'មិនអាចចាប់សំឡេងសន្ទនាភាសាចិនក្នុងវីដេអូដើម្បីបកប្រែបានឡើយ។');
     }
 
     return _parseScriptFromResponse(rawScript);
@@ -225,7 +242,10 @@ class GeminiRecapService {
   String _parseScriptFromResponse(String rawResponse) {
     // 1. If response is wrapped in JSON, extract dialogue items cleanly
     final trimmed = rawResponse.trim();
-    if (trimmed.startsWith('{') || trimmed.startsWith('[') || trimmed.contains('"speaker":') || trimmed.contains('"text":')) {
+    if (trimmed.startsWith('{') ||
+        trimmed.startsWith('[') ||
+        trimmed.contains('"speaker":') ||
+        trimmed.contains('"text":')) {
       try {
         var cleanedJson = trimmed;
         if (cleanedJson.startsWith('```json')) {
@@ -252,18 +272,27 @@ class GeminiRecapService {
           final buffer = StringBuffer();
           for (final item in items) {
             if (item is Map) {
-              final rawTime = item['time'] ?? item['timestamp'] ?? item['start_time'] ?? item['start'];
+              final rawTime = item['time'] ??
+                  item['timestamp'] ??
+                  item['start_time'] ??
+                  item['start'];
               final time = _formatTimestamp(rawTime);
 
-              String speaker = (item['speaker'] ?? item['gender'] ?? 'ប្រុស').toString().trim();
+              String speaker = (item['speaker'] ?? item['gender'] ?? 'ប្រុស')
+                  .toString()
+                  .trim();
               final isFemale = speaker.toLowerCase().contains('female') ||
                   speaker.toLowerCase().contains('ស្រី') ||
                   speaker.toLowerCase().contains('woman') ||
                   speaker == 'F';
               final speakerTag = isFemale ? '[ស្រី]:' : '[ប្រុស]:';
 
-              String text = (item['text'] ?? item['khmer'] ?? item['dialogue'] ?? '').toString().trim();
-              if (text.isNotEmpty && RegExp(r'[\u1780-\u17FF]').hasMatch(text)) {
+              String text =
+                  (item['text'] ?? item['khmer'] ?? item['dialogue'] ?? '')
+                      .toString()
+                      .trim();
+              if (text.isNotEmpty &&
+                  RegExp(r'[\u1780-\u17FF]').hasMatch(text)) {
                 buffer.writeln('$time $speakerTag $text');
               }
             }
@@ -282,7 +311,13 @@ class GeminiRecapService {
   /// Converts any time input (e.g. "00:00:02,800", "00:00:02", 4, "4", "0:04", "00:04", "00:04 - 00:08") into [MM:SS]
   String _formatSingleTime(dynamic rawTime) {
     if (rawTime == null) return '00:00';
-    var s = rawTime.toString().trim().replaceAll('[', '').replaceAll(']', '').replaceAll('(', '').replaceAll(')', '');
+    var s = rawTime
+        .toString()
+        .trim()
+        .replaceAll('[', '')
+        .replaceAll(']', '')
+        .replaceAll('(', '')
+        .replaceAll(')', '');
     if (s.isEmpty) return '00:00';
     s = s.replaceAll(',', '.');
 
@@ -294,7 +329,9 @@ class GeminiRecapService {
       return '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
     } else if (parts.length == 2) {
       final m = int.tryParse(parts[0])?.toString().padLeft(2, '0') ?? '00';
-      final sec = int.tryParse(parts[1].split('.').first)?.toString().padLeft(2, '0') ?? '00';
+      final sec =
+          int.tryParse(parts[1].split('.').first)?.toString().padLeft(2, '0') ??
+              '00';
       return '$m:$sec';
     } else if (parts.length == 1) {
       final numSec = double.tryParse(parts[0]);
@@ -322,20 +359,31 @@ class GeminiRecapService {
     final lines = rawText.split('\n');
     final buffer = StringBuffer();
     final timePattern = RegExp(
-      r'\[?\(?(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)(?:\s*(?:-->|[-–])\s*(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?))?\)?\]?'
-    );
+        r'\[?\(?(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)(?:\s*(?:-->|[-–])\s*(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?))?\)?\]?');
 
     String? pendingTimeTag;
     bool hasSeenFirstTimestamp = false;
 
     for (final line in lines) {
       var trimmed = line.trim();
-      if (trimmed.isEmpty) continue;
-      if (RegExp(r'^\d+$').hasMatch(trimmed)) continue; // Skip SRT block number lines
+      if (trimmed.isEmpty) {
+        continue;
+      }
+      if (RegExp(r'^\d+$').hasMatch(trimmed)) {
+        continue; // Skip SRT block number lines
+      }
 
       // Skip lines that are purely code or JSON symbols
-      if (trimmed == '{' || trimmed == '}' || trimmed == '[' || trimmed == ']' || trimmed == '},') continue;
-      if (RegExp(r'^"(?:time|speaker|gender|text|dialogue|segments)":', caseSensitive: false).hasMatch(trimmed)) {
+      if (trimmed == '{' ||
+          trimmed == '}' ||
+          trimmed == '[' ||
+          trimmed == ']' ||
+          trimmed == '},') {
+        continue;
+      }
+      if (RegExp(r'^"(?:time|speaker|gender|text|dialogue|segments)":',
+              caseSensitive: false)
+          .hasMatch(trimmed)) {
         final valMatch = RegExp(r':\s*"(.*)"?,?$').firstMatch(trimmed);
         if (valMatch != null) {
           trimmed = valMatch.group(1) ?? '';
@@ -362,17 +410,20 @@ class GeminiRecapService {
       // Check if line contains any Khmer script
       final hasKhmer = RegExp(r'[\u1780-\u17FF]').hasMatch(trimmed);
 
-      // Strip conversational preamble headers before first timestamp
+      // Filter out pure AI meta headers e.g. "ខាងក្រោមនេះជាការបកប្រែ:"
       if (!hasSeenFirstTimestamp && hasKhmer && tMatch == null) {
-        if (trimmed.contains('ការបកប្រែ') ||
-            trimmed.contains('ខាងក្រោមនេះ') ||
-            trimmed.contains('សាច់រឿង') ||
-            trimmed.contains('បញ្ចូលសំឡេង') ||
-            trimmed.contains('Timestamp') ||
-            trimmed.endsWith('៖') ||
-            trimmed.endsWith(':')) {
+        if (RegExp(
+                r'^(?:នេះជា|ខាងក្រោមនេះជា)?\s*(?:ការបកប្រែ|តារាងបកប្រែ|បញ្ជីបកប្រែ)\s*[:៖]?$',
+                caseSensitive: false)
+            .hasMatch(trimmed) ||
+            trimmed.startsWith('```') ||
+            trimmed.startsWith('Translation:') ||
+            trimmed.startsWith('Here is')) {
           continue;
         }
+        // If it's actual story narration or inner thoughts at the start without timestamp, assign [00:01]
+        pendingTimeTag = '[00:01]';
+        hasSeenFirstTimestamp = true;
       }
 
       if (!hasKhmer) continue;
@@ -380,27 +431,44 @@ class GeminiRecapService {
       var lineText = trimmed.replaceAll(timePattern, '').trim();
 
       bool isFemale = false;
-      // 1. Match any bracketed tag at the start e.g. [ស្រីចាស់], [ប្រុសចាស់], [ស្រី], [ប្រុស], [F], [M], [យាយ], [ម៉ាក់]
-      final bracketMatch = RegExp(r'^\s*\[([^\]]+)\]\s*[:៖\-–\s]*').firstMatch(lineText);
+      // 1. Match any bracketed tag at the start e.g. [ស្រី], [ប្រុស], [អ្នករៀបរាប់], [សម្រាយ], [ក្នុងចិត្ត]
+      final bracketMatch =
+          RegExp(r'^\s*\[([^\]]+)\]\s*[:៖\-–\s]*').firstMatch(lineText);
       if (bracketMatch != null) {
         final tagContent = bracketMatch.group(1)!.trim();
-        if (RegExp(r'(?:ស្រី|នារី|ស្ត្រី|ម្ដាយ|ម៉ាក់|យាយ|female|woman|girl|\bF\b)', caseSensitive: false).hasMatch(tagContent)) {
+        if (RegExp(
+                r'(?:ស្រី|នារី|ស្ត្រី|ម្ដាយ|ម៉ាក់|យាយ|female|woman|girl|\bF\b)',
+                caseSensitive: false)
+            .hasMatch(tagContent)) {
           isFemale = true;
-        } else if (RegExp(r'(?:ប្រុស|បុរស|ឪពុក|ប៉ា|តា|អ្នករៀបរាប់|male|man|boy|narrator|\bM\b)', caseSensitive: false).hasMatch(tagContent)) {
+        } else if (RegExp(
+                r'(?:ប្រុស|បុរស|ឪពុក|ប៉ា|តា|អ្នករៀបរាប់|អ្នកសម្រាយ|សម្រាយ|male|man|boy|narrator|\bM\b)',
+                caseSensitive: false)
+            .hasMatch(tagContent)) {
           isFemale = false;
         }
-        lineText = lineText.replaceFirst(RegExp(r'^\s*\[([^\]]+)\]\s*[:៖\-–\s]*'), '');
+        lineText =
+            lineText.replaceFirst(RegExp(r'^\s*\[([^\]]+)\]\s*[:៖\-–\s]*'), '');
       } else {
-        // 2. Match unbracketed tag at start e.g. ស្រីចាស់: or ប្រុស: or F:
-        final plainMatch = RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+').firstMatch(lineText);
+        // 2. Match unbracketed tag at start e.g. ស្រី: or ប្រុស: or សម្រាយ:
+        final plainMatch =
+            RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+').firstMatch(lineText);
         if (plainMatch != null) {
           final tagContent = plainMatch.group(1)!.trim();
-          if (RegExp(r'(?:ស្រី|នារី|ស្ត្រី|ម្ដាយ|ម៉ាក់|យាយ|female|woman|girl|^F$)', caseSensitive: false).hasMatch(tagContent)) {
+          if (RegExp(
+                  r'(?:ស្រី|នារី|ស្ត្រី|ម្ដាយ|ម៉ាក់|យាយ|female|woman|girl|^F$)',
+                  caseSensitive: false)
+              .hasMatch(tagContent)) {
             isFemale = true;
-            lineText = lineText.replaceFirst(RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+'), '');
-          } else if (RegExp(r'(?:ប្រុស|បុរស|ឪពុក|ប៉ា|តា|អ្នករៀបរាប់|male|man|boy|narrator|^M$)', caseSensitive: false).hasMatch(tagContent)) {
+            lineText = lineText.replaceFirst(
+                RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+'), '');
+          } else if (RegExp(
+                  r'(?:ប្រុស|បុរស|ឪពុក|ប៉ា|តា|អ្នករៀបរាប់|អ្នកសម្រាយ|សម្រាយ|male|man|boy|narrator|^M$)',
+                  caseSensitive: false)
+              .hasMatch(tagContent)) {
             isFemale = false;
-            lineText = lineText.replaceFirst(RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+'), '');
+            lineText = lineText.replaceFirst(
+                RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+'), '');
           }
         }
       }
@@ -413,7 +481,7 @@ class GeminiRecapService {
           .trim();
 
       if (clean.isNotEmpty && RegExp(r'[\u1780-\u17FF]').hasMatch(clean)) {
-        final timeTag = pendingTimeTag ?? '[00:00]';
+        final timeTag = pendingTimeTag ?? '[00:01]';
         pendingTimeTag = null;
         buffer.writeln('$timeTag $speakerTag $clean');
       }
@@ -422,8 +490,6 @@ class GeminiRecapService {
     final result = buffer.toString().trim();
     if (result.isNotEmpty) return result;
 
-    return rawText
-        .replaceAll(RegExp(r'["{}\[\]]'), '')
-        .trim();
+    return rawText.replaceAll(RegExp(r'["{}\[\]]'), '').trim();
   }
 }

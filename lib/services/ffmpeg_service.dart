@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
@@ -93,9 +95,10 @@ class FFmpegService {
 
     // -vf "scale='min(480,iw)':-2" : Scales video proportionally to max 480 width/height
     // -r 15 : 15 fps gives 100% adequate temporal resolution for Gemini vision and cuts payload in half
-    // -crf 32 -preset ultrafast : Finishes in 1-2 seconds with minimal CPU load
+    // -crf 32 -preset ultrafast -tune fastdecode -threads 0 : Finishes in 1-2 seconds with all CPU cores
     // -c:a aac -b:a 48k -ac 1 : Mono audio for voice clarity
-    final cmd = '-y -i "$videoPath" -vf "scale=\'min(480,iw)\':-2" -r 15 -c:v libx264 -preset ultrafast -crf 32 -c:a aac -b:a 48k -ac 1 "$outVideoPath"';
+    final cmd =
+        '-y -threads 0 -i "$videoPath" -vf "scale=\'min(480,iw)\':-2" -r 15 -c:v libx264 -preset ultrafast -tune fastdecode -crf 32 -c:a aac -b:a 48k -ac 1 "$outVideoPath"';
 
     final session = await FFmpegKit.execute(cmd);
     final returnCode = await session.getReturnCode();
@@ -115,7 +118,8 @@ class FFmpegService {
     final outAudioPath = '${tempDir.path}/extracted_audio_$timestamp.mp3';
 
     // -vn: no video, -ac 1: mono for smaller payload, -ar 16000: 16kHz speech recognition optimal, -b:a 64k
-    final cmd = '-y -i "$videoPath" -vn -ac 1 -ar 16000 -b:a 64k "$outAudioPath"';
+    final cmd =
+        '-y -threads 0 -i "$videoPath" -vn -ac 1 -ar 16000 -b:a 64k "$outAudioPath"';
 
     final session = await FFmpegKit.execute(cmd);
     final returnCode = await session.getReturnCode();
@@ -128,38 +132,127 @@ class FFmpegService {
     }
   }
 
+  /// Generates a transparent PNG image of the watermark text with rich shadow for video overlay
+  Future<String> createWatermarkImage({
+    required String text,
+    String? outputPath,
+  }) async {
+    final String path;
+    if (outputPath != null && outputPath.isNotEmpty) {
+      path = outputPath;
+    } else {
+      final tempDir = await getTemporaryDirectory();
+      path =
+          '${tempDir.path}/watermark_${DateTime.now().millisecondsSinceEpoch}.png';
+    }
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    final textSpan = TextSpan(
+      text: text,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 26,
+        fontWeight: FontWeight.bold,
+        shadows: [
+          Shadow(
+            color: Color(0xDD000000), // Solid dark drop shadow
+            offset: Offset(2.5, 2.5),
+            blurRadius: 4.0,
+          ),
+          Shadow(
+            color: Color(0x99000000),
+            offset: Offset(-1.0, -1.0),
+            blurRadius: 2.0,
+          ),
+        ],
+      ),
+    );
+
+    final textPainter = TextPainter(
+      text: textSpan,
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+
+    final width = (textPainter.width + 30).ceil();
+    final height = (textPainter.height + 20).ceil();
+
+    textPainter.paint(canvas, const Offset(15, 10));
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(width, height);
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    final pngBytes = byteData!.buffer.asUint8List();
+
+    final file = File(path);
+    await file.writeAsBytes(pngBytes, flush: true);
+    return file.path;
+  }
+
   /// Merges the newly synthesized Khmer voice with original video,
   /// ducking the original Chinese audio to [duckingVolume] (e.g. 0.15 = 15%).
-  /// Utilizes fast stream-copy for video (`-c:v copy`) when possible to prevent re-encoding lag.
+  /// Applies moving / bouncing watermark logo across the video continuously if [watermarkText] is provided.
   Future<String> mergeKhmerVoiceWithVideo({
     required String originalVideoPath,
     required String khmerAudioPath,
     required double duckingVolume, // 0.0 (mute) to 1.0 (full)
+    String? watermarkText,
     Function(int progressPercentage)? onProgress,
   }) async {
     final tempDir = await getTemporaryDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final outputVideoPath = '${tempDir.path}/khmer_recap_output_$timestamp.mp4';
 
-    // Complex filter:
-    // [0:a] is original video audio (ducked to duckingVolume)
-    // [1:a] is new Khmer narration (kept prominent at volume 1.1)
-    // amix combines both streams seamlessly
     final bgVolume = duckingVolume.clamp(0.0, 1.0).toStringAsFixed(2);
-    
+
     // Check if original video has audio track first
     final mediaInfo = await FFprobeKit.getMediaInformation(originalVideoPath);
-    final hasOriginalAudio = mediaInfo.getMediaInformation()?.getStreams().any((s) => s.getType() == 'audio') ?? false;
+    final hasOriginalAudio = mediaInfo
+            .getMediaInformation()
+            ?.getStreams()
+            .any((s) => s.getType() == 'audio') ??
+        false;
+
+    String? watermarkImgPath;
+    if (watermarkText != null && watermarkText.trim().isNotEmpty) {
+      try {
+        watermarkImgPath =
+            await createWatermarkImage(text: watermarkText.trim());
+      } catch (e) {
+        debugPrint('Warning: Could not create watermark image: $e');
+      }
+    }
 
     String cmd;
-    if (hasOriginalAudio && duckingVolume >= 0.02) {
-      cmd = '-y -i "$originalVideoPath" -i "$khmerAudioPath" '
-          '-filter_complex "[0:a]volume=$bgVolume[bg];[1:a]volume=1.35[khmer];[khmer][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]" '
-          '-map 0:v:0 -map "[aout]" -c:v copy -c:a aac -b:a 192k -shortest "$outputVideoPath"';
+    if (watermarkImgPath != null) {
+      // Overlay moving/bouncing watermark continuously across the video with shadow text
+      // x oscillates smoothly between 20 and W-w-20
+      // y oscillates smoothly between 25 and H-h-25
+      const overlayMotion =
+          "[0:v][2:v]overlay=x='20+(W-w-40)*(0.5+0.5*sin(t*0.6))':y='25+(H-h-50)*(0.5+0.5*cos(t*0.45))'[vout]";
+
+      if (hasOriginalAudio && duckingVolume >= 0.02) {
+        cmd =
+            '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" -i "$watermarkImgPath" '
+            '-filter_complex "$overlayMotion;[0:a]volume=$bgVolume[bg];[1:a]volume=1.35[khmer];[khmer][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]" '
+            '-map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
+      } else {
+        cmd =
+            '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" -i "$watermarkImgPath" '
+            '-filter_complex "$overlayMotion" '
+            '-map "[vout]" -map 1:a:0 -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
+      }
     } else {
-      // Completely mute/remove original Chinese audio when ducking is low/0 (Strictly map only 1:a:0)
-      cmd = '-y -i "$originalVideoPath" -i "$khmerAudioPath" '
-          '-map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 192k -shortest "$outputVideoPath"';
+      if (hasOriginalAudio && duckingVolume >= 0.02) {
+        cmd = '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" '
+            '-filter_complex "[0:a]volume=$bgVolume[bg];[1:a]volume=1.35[khmer];[khmer][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]" '
+            '-map 0:v:0 -map "[aout]" -c:v copy -c:a aac -b:a 192k -shortest "$outputVideoPath"';
+      } else {
+        cmd = '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" '
+            '-map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 192k -shortest "$outputVideoPath"';
+      }
     }
 
     final session = await FFmpegKit.execute(cmd);
@@ -171,12 +264,14 @@ class FFmpegService {
       // If stream copy failed due to container flags, fallback to re-encoding with H.264
       String fallbackCmd;
       if (hasOriginalAudio && duckingVolume >= 0.02) {
-        fallbackCmd = '-y -i "$originalVideoPath" -i "$khmerAudioPath" '
+        fallbackCmd =
+            '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" '
             '-filter_complex "[0:a]volume=$bgVolume[bg];[1:a]volume=1.35[khmer];[khmer][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]" '
-            '-map 0:v:0 -map "[aout]" -c:v libx264 -preset ultrafast -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
+            '-map 0:v:0 -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
       } else {
-        fallbackCmd = '-y -i "$originalVideoPath" -i "$khmerAudioPath" '
-            '-map 0:v:0 -map 1:a:0 -c:v libx264 -preset ultrafast -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
+        fallbackCmd =
+            '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" '
+            '-map 0:v:0 -map 1:a:0 -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
       }
 
       final fallbackSession = await FFmpegKit.execute(fallbackCmd);
@@ -187,12 +282,14 @@ class FFmpegService {
       }
 
       final logs = await session.getAllLogsAsString();
-      throw Exception('FFmpeg បរាជ័យក្នុងការច្របាច់បញ្ចូលសំឡេង និងវីដេអូ: $logs');
+      throw Exception(
+          'FFmpeg បរាជ័យក្នុងការច្របាច់បញ្ចូលសំឡេង និងវីដេអូ: $logs');
     }
   }
 
   /// Exports standalone Khmer recap audio to persistent Android storage
-  Future<String> exportKhmerAudioFile(String srcAudioPath, String customName) async {
+  Future<String> exportKhmerAudioFile(
+      String srcAudioPath, String customName) async {
     Directory? exportDir;
     if (Platform.isAndroid) {
       exportDir = Directory('/storage/emulated/0/Download');
@@ -209,10 +306,12 @@ class FFmpegService {
     return targetPath;
   }
 
-  static const MethodChannel _scannerChannel = MethodChannel('com.example.khmer_recap_ai/media_scanner');
+  static const MethodChannel _scannerChannel =
+      MethodChannel('com.example.khmer_recap_ai/media_scanner');
 
-  /// Automatically exports dubbed video into Phone Gallery (DCIM and Movies) and triggers Android MediaStore scan
-  Future<String> autoSaveToGallery(String srcVideoPath, {String? customName}) async {
+  /// Exports dubbed video into Phone Gallery (DCIM/KhmerRecap) exactly ONCE without duplicate copies
+  Future<String> autoSaveToGallery(String srcVideoPath,
+      {String? customName}) async {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final title = customName ?? 'KhmerRecap_$timestamp';
     final fileName = '$title.mp4';
@@ -220,44 +319,34 @@ class FFmpegService {
     String targetPath = srcVideoPath;
 
     if (Platform.isAndroid) {
-      // 1. Native MediaStore Insertion for Android 10+ Gallery integration
+      // 1. Native MediaStore insertion into DCIM/KhmerRecap
       try {
-        final dynamic nativeResult = await _scannerChannel.invokeMethod('saveVideoToGallery', {
+        final dynamic nativeResult =
+            await _scannerChannel.invokeMethod('saveVideoToGallery', {
           'srcPath': srcVideoPath,
           'title': title,
         });
-        if (nativeResult is String && nativeResult.isNotEmpty && !nativeResult.startsWith('content://')) {
+        if (nativeResult is String && nativeResult.isNotEmpty) {
           targetPath = nativeResult;
+          return targetPath; // Return immediately to guarantee single gallery entry!
         }
       } catch (e) {
         debugPrint('Native saveVideoToGallery note: $e');
       }
 
-      // 2. Direct copy into /storage/emulated/0/DCIM/KhmerRecap to ensure standard Gallery folder presence
+      // 2. Fallback only if native MediaStore fails
       try {
         final dcimDir = Directory('/storage/emulated/0/DCIM/KhmerRecap');
         if (!await dcimDir.exists()) {
           await dcimDir.create(recursive: true);
         }
         final dcimFile = File('${dcimDir.path}/$fileName');
-        if (!await dcimFile.exists() || (await dcimFile.length()) != (await File(srcVideoPath).length())) {
+        if (!await dcimFile.exists() ||
+            (await dcimFile.length()) != (await File(srcVideoPath).length())) {
           await File(srcVideoPath).copy(dcimFile.path);
         }
         targetPath = dcimFile.path;
         await _scannerChannel.invokeMethod('scanFile', {'path': targetPath});
-      } catch (_) {}
-
-      // 3. Secondary backup in Movies: /storage/emulated/0/Movies/KhmerRecap
-      try {
-        final moviesDir = Directory('/storage/emulated/0/Movies/KhmerRecap');
-        if (!await moviesDir.exists()) {
-          await moviesDir.create(recursive: true);
-        }
-        final moviesFile = File('${moviesDir.path}/$fileName');
-        if (!await moviesFile.exists()) {
-          await File(srcVideoPath).copy(moviesFile.path);
-        }
-        await _scannerChannel.invokeMethod('scanFile', {'path': moviesFile.path});
       } catch (_) {}
     } else {
       final docDir = await getApplicationDocumentsDirectory();
@@ -270,7 +359,8 @@ class FFmpegService {
   }
 
   /// Saves the dubbed video to the Movies or DCIM directory and scans into Phone Gallery
-  Future<String> exportDubbedVideoFile(String srcVideoPath, String customName) async {
+  Future<String> exportDubbedVideoFile(
+      String srcVideoPath, String customName) async {
     return autoSaveToGallery(srcVideoPath, customName: customName);
   }
 }

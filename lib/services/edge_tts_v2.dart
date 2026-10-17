@@ -20,31 +20,109 @@ class EdgeTtsV2 {
   static const int _u32Mask = 0xFFFFFFFF;
 
   static const List<int> _sha256Initial = [
-    0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A,
-    0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
+    0x6A09E667,
+    0xBB67AE85,
+    0x3C6EF372,
+    0xA54FF53A,
+    0x510E527F,
+    0x9B05688C,
+    0x1F83D9AB,
+    0x5BE0CD19,
   ];
 
   static const List<int> _sha256State = [
-    0xFD9FBEA2, 0x91243CE7, 0xBE499094, 0xCD2E1E0A,
-    0x6C006F49, 0x04BD35AB, 0xFEB0A7E4, 0x03EFFBD2,
+    0xFD9FBEA2,
+    0x91243CE7,
+    0xBE499094,
+    0xCD2E1E0A,
+    0x6C006F49,
+    0x04BD35AB,
+    0xFEB0A7E4,
+    0x03EFFBD2,
   ];
 
   static const List<int> _sha256Schedule = [
-    0xEB24BF9E, 0x1558691F, 0xA0C09EE2, 0x0CFA32BA,
-    0xA622EE8C, 0xD1DD9491, 0xC0DD25A0, 0xF9E70AB6,
-    0xF0C31573, 0x7058CE4E, 0x7188E606, 0x00E5AB33,
-    0xD258B060, 0x72766564,
+    0xEB24BF9E,
+    0x1558691F,
+    0xA0C09EE2,
+    0x0CFA32BA,
+    0xA622EE8C,
+    0xD1DD9491,
+    0xC0DD25A0,
+    0xF9E70AB6,
+    0xF0C31573,
+    0x7058CE4E,
+    0x7188E606,
+    0x00E5AB33,
+    0xD258B060,
+    0x72766564,
   ];
 
   static const List<int> _sha256RoundConstants = [
-    0x428A2F98, 0x71374491, 0xB5C0FBCF, 0xE9B5DBA5, 0x3956C25B, 0x59F111F1, 0x923F82A4, 0xAB1C5ED5,
-    0xD807AA98, 0x12835B01, 0x243185BE, 0x550C7DC3, 0x72BE5D74, 0x80DEB1FE, 0x9BDC06A7, 0xC19BF174,
-    0xE49B69C1, 0xEFBE4786, 0x0FC19DC6, 0x240CA1CC, 0x2DE92C6F, 0x4A7484AA, 0x5CB0A9DC, 0x76F988DA,
-    0x983E5152, 0xA831C66D, 0xB00327C8, 0xBF597FC7, 0xC6E00BF3, 0xD5A79147, 0x06CA6351, 0x14292967,
-    0x27B70A85, 0x2E1B2138, 0x4D2C6DFC, 0x53380D13, 0x650A7354, 0x766A0ABB, 0x81C2C92E, 0x92722C85,
-    0xA2BFE8A1, 0xA81A664B, 0xC24B8B70, 0xC76C51A3, 0xD192E819, 0xD6990624, 0xF40E3585, 0x106AA070,
-    0x19A4C116, 0x1E376C08, 0x2748774C, 0x34B0BCB5, 0x391C0CB3, 0x4ED8AA4A, 0x5B9CCA4F, 0x682E6FF3,
-    0x748F82EE, 0x78A5636F, 0x84C87814, 0x8CC70208, 0x90BEFFFA, 0xA4506CEB, 0xBEF9A3F7, 0xC67178F2,
+    0x428A2F98,
+    0x71374491,
+    0xB5C0FBCF,
+    0xE9B5DBA5,
+    0x3956C25B,
+    0x59F111F1,
+    0x923F82A4,
+    0xAB1C5ED5,
+    0xD807AA98,
+    0x12835B01,
+    0x243185BE,
+    0x550C7DC3,
+    0x72BE5D74,
+    0x80DEB1FE,
+    0x9BDC06A7,
+    0xC19BF174,
+    0xE49B69C1,
+    0xEFBE4786,
+    0x0FC19DC6,
+    0x240CA1CC,
+    0x2DE92C6F,
+    0x4A7484AA,
+    0x5CB0A9DC,
+    0x76F988DA,
+    0x983E5152,
+    0xA831C66D,
+    0xB00327C8,
+    0xBF597FC7,
+    0xC6E00BF3,
+    0xD5A79147,
+    0x06CA6351,
+    0x14292967,
+    0x27B70A85,
+    0x2E1B2138,
+    0x4D2C6DFC,
+    0x53380D13,
+    0x650A7354,
+    0x766A0ABB,
+    0x81C2C92E,
+    0x92722C85,
+    0xA2BFE8A1,
+    0xA81A664B,
+    0xC24B8B70,
+    0xC76C51A3,
+    0xD192E819,
+    0xD6990624,
+    0xF40E3585,
+    0x106AA070,
+    0x19A4C116,
+    0x1E376C08,
+    0x2748774C,
+    0x34B0BCB5,
+    0x391C0CB3,
+    0x4ED8AA4A,
+    0x5B9CCA4F,
+    0x682E6FF3,
+    0x748F82EE,
+    0x78A5636F,
+    0x84C87814,
+    0x8CC70208,
+    0x90BEFFFA,
+    0xA4506CEB,
+    0xBEF9A3F7,
+    0xC67178F2,
   ];
 
   static const int _sha256Adjustment = 0xC9DC06A7;
@@ -105,19 +183,31 @@ class EdgeTtsV2 {
 
   static int _sigma0(int value) {
     value &= _u32Mask;
-    return ((value >>> 7) ^ (value << 25) ^ (value >>> 18) ^ (value << 14) ^ (value >>> 3)) & _u32Mask;
+    return ((value >>> 7) ^
+            (value << 25) ^
+            (value >>> 18) ^
+            (value << 14) ^
+            (value >>> 3)) &
+        _u32Mask;
   }
 
   static int _sigma1(int value) {
     value &= _u32Mask;
-    return ((value >>> 17) ^ (value << 15) ^ (value >>> 19) ^ (value << 13) ^ (value >>> 10)) & _u32Mask;
+    return ((value >>> 17) ^
+            (value << 15) ^
+            (value >>> 19) ^
+            (value << 13) ^
+            (value >>> 10)) &
+        _u32Mask;
   }
 
-  static List<int> _sha256Rounds(List<int> state, List<int> words, [int firstRound = 0]) {
+  static List<int> _sha256Rounds(List<int> state, List<int> words,
+      [int firstRound = 0]) {
     int a = state[0], b = state[1], c = state[2], d = state[3];
     int e = state[4], f = state[5], g = state[6], h = state[7];
     const mask = _u32Mask;
-    final constants = (firstRound == 14) ? _sha256BlockConstants : _sha256RoundConstants;
+    final constants =
+        (firstRound == 14) ? _sha256BlockConstants : _sha256RoundConstants;
 
     final aligned = ((firstRound + 7) ~/ 8) * 8;
     final limit = aligned < 64 ? aligned : 64;
@@ -131,7 +221,9 @@ class EdgeTtsV2 {
               constants[index] +
               words[index]) &
           mask;
-      final t2 = (((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) + ((a & b) | (c & (a | b)))) & mask;
+      final t2 = (((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) +
+              ((a & b) | (c & (a | b)))) &
+          mask;
       h = g;
       g = f;
       f = e;
@@ -145,51 +237,115 @@ class EdgeTtsV2 {
     for (int index = limit; index < 64; index += 8) {
       var rotE = (e & mask) * 0x100000001;
       var rotA = (a & mask) * 0x100000001;
-      var t1 = (h + ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) + (g ^ (e & (f ^ g))) + constants[index] + words[index]) & mask;
+      var t1 = (h +
+              ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) +
+              (g ^ (e & (f ^ g))) +
+              constants[index] +
+              words[index]) &
+          mask;
       d = (d + t1) & mask;
-      h = (t1 + ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) + ((a & b) | (c & (a | b)))) & mask;
+      h = (t1 +
+              ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) +
+              ((a & b) | (c & (a | b)))) &
+          mask;
 
       rotE = (d & mask) * 0x100000001;
       rotA = (h & mask) * 0x100000001;
-      t1 = (g + ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) + (f ^ (d & (e ^ f))) + constants[index + 1] + words[index + 1]) & mask;
+      t1 = (g +
+              ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) +
+              (f ^ (d & (e ^ f))) +
+              constants[index + 1] +
+              words[index + 1]) &
+          mask;
       c = (c + t1) & mask;
-      g = (t1 + ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) + ((h & a) | (b & (h | a)))) & mask;
+      g = (t1 +
+              ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) +
+              ((h & a) | (b & (h | a)))) &
+          mask;
 
       rotE = (c & mask) * 0x100000001;
       rotA = (g & mask) * 0x100000001;
-      t1 = (f + ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) + (e ^ (c & (d ^ e))) + constants[index + 2] + words[index + 2]) & mask;
+      t1 = (f +
+              ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) +
+              (e ^ (c & (d ^ e))) +
+              constants[index + 2] +
+              words[index + 2]) &
+          mask;
       b = (b + t1) & mask;
-      f = (t1 + ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) + ((g & h) | (a & (g | h)))) & mask;
+      f = (t1 +
+              ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) +
+              ((g & h) | (a & (g | h)))) &
+          mask;
 
       rotE = (b & mask) * 0x100000001;
       rotA = (f & mask) * 0x100000001;
-      t1 = (e + ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) + (d ^ (b & (c ^ d))) + constants[index + 3] + words[index + 3]) & mask;
+      t1 = (e +
+              ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) +
+              (d ^ (b & (c ^ d))) +
+              constants[index + 3] +
+              words[index + 3]) &
+          mask;
       a = (a + t1) & mask;
-      e = (t1 + ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) + ((f & g) | (h & (f | g)))) & mask;
+      e = (t1 +
+              ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) +
+              ((f & g) | (h & (f | g)))) &
+          mask;
 
       rotE = (a & mask) * 0x100000001;
       rotA = (e & mask) * 0x100000001;
-      t1 = (d + ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) + (c ^ (a & (b ^ c))) + constants[index + 4] + words[index + 4]) & mask;
+      t1 = (d +
+              ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) +
+              (c ^ (a & (b ^ c))) +
+              constants[index + 4] +
+              words[index + 4]) &
+          mask;
       h = (h + t1) & mask;
-      d = (t1 + ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) + ((e & f) | (g & (e | f)))) & mask;
+      d = (t1 +
+              ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) +
+              ((e & f) | (g & (e | f)))) &
+          mask;
 
       rotE = (h & mask) * 0x100000001;
       rotA = (d & mask) * 0x100000001;
-      t1 = (c + ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) + (b ^ (h & (a ^ b))) + constants[index + 5] + words[index + 5]) & mask;
+      t1 = (c +
+              ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) +
+              (b ^ (h & (a ^ b))) +
+              constants[index + 5] +
+              words[index + 5]) &
+          mask;
       g = (g + t1) & mask;
-      c = (t1 + ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) + ((d & e) | (f & (d | e)))) & mask;
+      c = (t1 +
+              ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) +
+              ((d & e) | (f & (d | e)))) &
+          mask;
 
       rotE = (g & mask) * 0x100000001;
       rotA = (c & mask) * 0x100000001;
-      t1 = (b + ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) + (a ^ (g & (h ^ a))) + constants[index + 6] + words[index + 6]) & mask;
+      t1 = (b +
+              ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) +
+              (a ^ (g & (h ^ a))) +
+              constants[index + 6] +
+              words[index + 6]) &
+          mask;
       f = (f + t1) & mask;
-      b = (t1 + ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) + ((c & d) | (e & (c | d)))) & mask;
+      b = (t1 +
+              ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) +
+              ((c & d) | (e & (c | d)))) &
+          mask;
 
       rotE = (f & mask) * 0x100000001;
       rotA = (b & mask) * 0x100000001;
-      t1 = (a + ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) + (h ^ (f & (g ^ h))) + constants[index + 7] + words[index + 7]) & mask;
+      t1 = (a +
+              ((rotE >>> 6) ^ (rotE >>> 11) ^ (rotE >>> 25)) +
+              (h ^ (f & (g ^ h))) +
+              constants[index + 7] +
+              words[index + 7]) &
+          mask;
       e = (e + t1) & mask;
-      a = (t1 + ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) + ((b & c) | (d & (b | c)))) & mask;
+      a = (t1 +
+              ((rotA >>> 2) ^ (rotA >>> 13) ^ (rotA >>> 22)) +
+              ((b & c) | (d & (b | c)))) &
+          mask;
     }
 
     return [a, b, c, d, e, f, g, h];
@@ -200,8 +356,10 @@ class EdgeTtsV2 {
     for (int index = firstWord; index < 64; index++) {
       final x = words[index - 2];
       final y = words[index - 15];
-      final s1 = ((x >>> 17) ^ (x << 15) ^ (x >>> 19) ^ (x << 13) ^ (x >>> 10)) & mask;
-      final s0 = ((y >>> 7) ^ (y << 25) ^ (y >>> 18) ^ (y << 14) ^ (y >>> 3)) & mask;
+      final s1 =
+          ((x >>> 17) ^ (x << 15) ^ (x >>> 19) ^ (x << 13) ^ (x >>> 10)) & mask;
+      final s0 =
+          ((y >>> 7) ^ (y << 25) ^ (y >>> 18) ^ (y << 14) ^ (y >>> 3)) & mask;
       final val = (s1 + words[index - 7] + s0 + words[index - 16]) & mask;
       if (index < words.length) {
         words[index] = val;
@@ -215,7 +373,8 @@ class EdgeTtsV2 {
     const mask = _u32Mask;
     final words = List<int>.filled(14, 0, growable: true);
     words.add(((data[0] << 16) | (data[1] << 8) | data[2]) & mask);
-    words.add(((data[3] << 24) | (data[4] << 16) | (data[5] << 8) | data[6]) & mask);
+    words.add(
+        ((data[3] << 24) | (data[4] << 16) | (data[5] << 8) | data[6]) & mask);
 
     for (int index = 16; index < 30; index++) {
       int value = _sha256Schedule[index - 16];
@@ -249,7 +408,9 @@ class EdgeTtsV2 {
   }
 
   static Uint8List _sha256Digest(Uint8List data) {
-    if (data.length < 7) throw ArgumentError('Token salt must contain at least 7 bytes');
+    if (data.length < 7) {
+      throw ArgumentError('Token salt must contain at least 7 bytes');
+    }
     const mask = _u32Mask;
     final length = 57 + data.length;
     final padLen = ((55 - length) % 64 + 64) % 64;
@@ -261,7 +422,9 @@ class EdgeTtsV2 {
 
     var state = _sha256Init(data.sublist(0, 7));
     for (int offset = 0; offset < padded.length; offset += 64) {
-      final words = List<int>.generate(16, (i) => bd.getUint32(offset + i * 4, Endian.big), growable: true);
+      final words = List<int>.generate(
+          16, (i) => bd.getUint32(offset + i * 4, Endian.big),
+          growable: true);
       _expandSha256Schedule(words);
       final working = _sha256Rounds(state, words);
       state = List.generate(8, (i) => (state[i] + working[i]) & mask);
@@ -303,7 +466,8 @@ class EdgeTtsV2 {
     for (int i = 0; i < words.length; i++) {
       final word = words[i];
       int term = (word * (i % 2 == 0 ? keyA : keyB)) & mask;
-      int offset = (_rol16(word) * (i % 2 == 0 ? 0xEF0569FB : 0xC31713DB)) & mask;
+      int offset =
+          (_rol16(word) * (i % 2 == 0 ? 0xEF0569FB : 0xC31713DB)) & mask;
       if (i == 0) {
         term = (term + _cs64Adjustment0 * factors[0]) & mask;
         offset = (offset + _cs64Adjustment1) & mask;
@@ -347,12 +511,16 @@ class EdgeTtsV2 {
   }
 
   static String _bytesToHexUpper(Uint8List bytes) {
-    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join('').toUpperCase();
+    return bytes
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join('')
+        .toUpperCase();
   }
 
   static String generateSecMsGecV2([double? unixTimestamp]) {
     double nowSec = unixTimestamp ??
-        ((DateTime.now().toUtc().millisecondsSinceEpoch / 1000.0) + _clockSkewSeconds);
+        ((DateTime.now().toUtc().millisecondsSinceEpoch / 1000.0) +
+            _clockSkewSeconds);
     nowSec += winEpoch;
     nowSec -= nowSec % 300;
     nowSec *= sToNs / 100;
@@ -376,14 +544,16 @@ class EdgeTtsV2 {
     if (_clockCalibrated && !force) return;
     try {
       final client = HttpClient()..userAgent = null;
-      final req = await client.headUrl(Uri.parse('https://speech.platform.bing.com'));
+      final req =
+          await client.headUrl(Uri.parse('https://speech.platform.bing.com'));
       final resp = await req.close().timeout(const Duration(seconds: 4));
       final serverDateStr = resp.headers.value('date');
       if (serverDateStr != null) {
         final serverTime = HttpDate.parse(serverDateStr);
         final clientTime = DateTime.now().toUtc();
-        _clockSkewSeconds =
-            (serverTime.millisecondsSinceEpoch - clientTime.millisecondsSinceEpoch) / 1000.0;
+        _clockSkewSeconds = (serverTime.millisecondsSinceEpoch -
+                clientTime.millisecondsSinceEpoch) /
+            1000.0;
         _clockCalibrated = true;
       }
       await resp.drain();
@@ -393,18 +563,34 @@ class EdgeTtsV2 {
 
   static String generateMuid() {
     final random = Random.secure();
-    return List.generate(32, (_) => random.nextInt(16).toRadixString(16)).join().toUpperCase();
+    return List.generate(32, (_) => random.nextInt(16).toRadixString(16))
+        .join()
+        .toUpperCase();
   }
 
   static String generateUuidHex() {
     final random = Random.secure();
-    return List.generate(32, (_) => random.nextInt(16).toRadixString(16)).join();
+    return List.generate(32, (_) => random.nextInt(16).toRadixString(16))
+        .join();
   }
 
   static String generateTimestamp() {
     final now = DateTime.now().toUtc();
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
     final wd = weekdays[now.weekday - 1];
     final mo = months[now.month - 1];
     final d = now.day.toString().padLeft(2, '0');
@@ -415,7 +601,8 @@ class EdgeTtsV2 {
   }
 
   static String _voiceShortToLong(String shortName) {
-    final match = RegExp(r'^([a-z]{2,})-([A-Z]{2,})-(.+Neural)$').firstMatch(shortName);
+    final match =
+        RegExp(r'^([a-z]{2,})-([A-Z]{2,})-(.+Neural)$').firstMatch(shortName);
     if (match != null) {
       final locale = '${match.group(1)}-${match.group(2)}';
       final name = match.group(3);
@@ -520,9 +707,10 @@ class EdgeTtsV2 {
     final ws = await WebSocket.connect(
       wsUrlString,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-            '(KHTML, like Gecko) Chrome/$chromiumMajorVersion.0.0.0 Safari/537.36 '
-            'Edg/$chromiumMajorVersion.0.0.0',
+        'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/$chromiumMajorVersion.0.0.0 Safari/537.36 '
+                'Edg/$chromiumMajorVersion.0.0.0',
         'Accept-Encoding': 'gzip, deflate, br, zstd',
         'Accept-Language': 'en-US,en;q=0.9',
         'Pragma': 'no-cache',
@@ -548,7 +736,8 @@ class EdgeTtsV2 {
 
     final longVoice = _voiceShortToLong(voice);
     final escaped = _xmlEscape(text);
-    final ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' "
+    final ssml =
+        "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' "
         "xml:lang='en-US'>"
         "<voice name='$longVoice'>"
         "<prosody pitch='$pitch' rate='$rate' volume='$volume'>"
@@ -578,7 +767,9 @@ class EdgeTtsV2 {
           if (message.length > 2) {
             final headerLength = (message[0] << 8) | message[1];
             if (message.length >= 2 + headerLength) {
-              final headerText = ascii.decode(message.sublist(2, 2 + headerLength), allowInvalid: true);
+              final headerText = ascii.decode(
+                  message.sublist(2, 2 + headerLength),
+                  allowInvalid: true);
               if (headerText.contains('Content-Type:audio/mpeg')) {
                 final audioBytes = message.sublist(2 + headerLength);
                 builder.add(audioBytes);
@@ -597,7 +788,8 @@ class EdgeTtsV2 {
     );
 
     try {
-      final result = await completer.future.timeout(const Duration(seconds: 15));
+      final result =
+          await completer.future.timeout(const Duration(seconds: 15));
       return result;
     } finally {
       await sub.cancel();
