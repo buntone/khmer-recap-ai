@@ -229,7 +229,8 @@ class KhmerTtsService {
     }
 
     if (chunkFiles.isEmpty) {
-      throw Exception('បរាជ័យក្នុងការបង្កើតសំឡេង (Failed to generate voice clips).');
+      throw Exception(
+          'បរាជ័យក្នុងការបង្កើតសំឡេង (Failed to generate voice clips).');
     }
 
     // Build timeline playlist by inserting pure Dart silence gaps to ensure perfect lip-sync
@@ -344,7 +345,8 @@ class KhmerTtsService {
     bd.setUint16(20, 1, Endian.little); // PCM format
     bd.setUint16(22, channels, Endian.little);
     bd.setUint32(24, sampleRate, Endian.little);
-    bd.setUint32(28, sampleRate * channels * bytesPerSample, Endian.little); // 48000
+    bd.setUint32(
+        28, sampleRate * channels * bytesPerSample, Endian.little); // 48000
     bd.setUint16(32, channels * bytesPerSample, Endian.little); // 2
     bd.setUint16(34, bitsPerSample, Endian.little); // 16
 
@@ -470,10 +472,9 @@ class KhmerTtsService {
 
       // Filter conversational AI preambles before first timestamp
       if (!hasSeenFirstTimestamp && hasKhmer && tMatch == null) {
-        if (RegExp(
-                r'^(?:នេះជា|ខាងក្រោមនេះជា)?\s*(?:ការបកប្រែ|តារាងបកប្រែ|បញ្ជីបកប្រែ)\s*[:៖]?$',
-                caseSensitive: false)
-            .hasMatch(trimmed) ||
+        if (RegExp(r'^(?:នេះជា|ខាងក្រោមនេះជា)?\s*(?:ការបកប្រែ|តារាងបកប្រែ|បញ្ជីបកប្រែ)\s*[:៖]?$',
+                    caseSensitive: false)
+                .hasMatch(trimmed) ||
             trimmed.startsWith('```') ||
             trimmed.startsWith('Translation:') ||
             trimmed.startsWith('Here is')) {
@@ -557,10 +558,12 @@ class KhmerTtsService {
       // If untagged inner monologue, check for gender context cues
       if (!hasExplicitSpeaker &&
           RegExp(r'(?:ក្នុងចិត្ត|គិតក្នុងចិត្ត|内心|心想|独白)').hasMatch(trimmed)) {
-        if (RegExp(r'(?:នាង|ម៉ាក់|ម៉ែ|កូនស្រី|ប្អូនស្រី|ស្ត្រី|យាយ)').hasMatch(trimmed)) {
+        if (RegExp(r'(?:នាង|ម៉ាក់|ម៉ែ|កូនស្រី|ប្អូនស្រី|ស្ត្រី|យាយ)')
+            .hasMatch(trimmed)) {
           isFemale = true;
           hasExplicitSpeaker = true;
-        } else if (RegExp(r'(?:បង|ពុក|ប៉ា|កូនប្រុស|ប្អូនប្រុស|បុរស|តា)').hasMatch(trimmed)) {
+        } else if (RegExp(r'(?:បង|ពុក|ប៉ា|កូនប្រុស|ប្អូនប្រុស|បុរស|តា)')
+            .hasMatch(trimmed)) {
           isFemale = false;
           hasExplicitSpeaker = true;
         }
@@ -588,6 +591,15 @@ class KhmerTtsService {
       var cleanLine = lineText
           .replaceAll(RegExp(r'["{}\[\]]'), '')
           .replaceAll(RegExp(r'^[:៖\-–\s]+'), '')
+          .trim();
+
+      // Eliminate any unwanted "សម្រាយរឿង" / "សម្រាយសាច់រឿង" intro narration prefixes
+      cleanLine = cleanLine
+          .replaceFirst(
+              RegExp(
+                  r'^(?:ការសម្រាយរឿង|សម្រាយសាច់រឿង|សម្រាយរឿង|អ្នកសម្រាយរឿង|សម្រាយ)\s*[:៖\-–\s]*',
+                  caseSensitive: false),
+              '')
           .trim();
 
       if (cleanLine.isNotEmpty &&

@@ -2,7 +2,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Pure Dart WAV silence generator produces canonical 24kHz mono PCM WAV', () async {
+  test('Pure Dart WAV silence generator produces canonical 24kHz mono PCM WAV',
+      () async {
     const sampleRate = 24000;
     const channels = 1;
     const bitsPerSample = 16;

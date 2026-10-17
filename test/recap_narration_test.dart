@@ -4,7 +4,8 @@ import 'package:khmer_recap_ai/services/khmer_tts_service.dart';
 import 'package:khmer_recap_ai/services/ffmpeg_service.dart';
 
 void main() {
-  test('KhmerVoice.prasith mode guarantees 100% male voice for all dialogue', () {
+  test('KhmerVoice.prasith mode guarantees 100% male voice for all dialogue',
+      () {
     final tts = KhmerTtsService(
       endpoint: '',
       apiToken: '',
@@ -19,7 +20,8 @@ void main() {
 [00:16] [ប្រុស]: ម៉ែ! កូនជាប់រវល់ការងារនៅទីនេះ។
 ''';
 
-    final segments = tts.parseDialogueSegmentsForTesting(script, KhmerVoice.prasith);
+    final segments =
+        tts.parseDialogueSegmentsForTesting(script, KhmerVoice.prasith);
     expect(segments.length, 4);
     for (final seg in segments) {
       expect(seg.voiceId, 'male_prasith',
@@ -27,7 +29,9 @@ void main() {
     }
   });
 
-  test('AutoDialogue mode accurately matches male and female voices for both speech and inner thoughts', () {
+  test(
+      'AutoDialogue mode accurately matches male and female voices for both speech and inner thoughts',
+      () {
     final tts = KhmerTtsService(
       endpoint: '',
       apiToken: '',
@@ -43,10 +47,12 @@ void main() {
 [00:20] [ប្រុស]: ម៉ែ! កូនជាប់រវល់ការងារនៅទីនេះ។
 ''';
 
-    final segments = tts.parseDialogueSegmentsForTesting(script, KhmerVoice.autoDialogue);
+    final segments =
+        tts.parseDialogueSegmentsForTesting(script, KhmerVoice.autoDialogue);
     expect(segments.length, 5);
-    // Line 1: Intro recap narration -> Male
+    // Line 1: Intro recap narration -> Male and "សម្រាយសាច់រឿង" is stripped cleanly
     expect(segments[0].voiceId, 'male_prasith');
+    expect(segments[0].text, 'បីឆ្នាំមុន នាងត្រូវបានគេបណ្តេញចេញពីត្រកូល។');
     // Line 2: Female thinking in her mind -> Female
     expect(segments[1].voiceId, 'female_sreymom');
     // Line 3: Female speaking out loud -> Female
@@ -57,11 +63,14 @@ void main() {
     expect(segments[4].voiceId, 'male_prasith');
   });
 
-  testWidgets('createWatermarkImage generates a valid PNG file with shadow text', (tester) async {
+  testWidgets(
+      'createWatermarkImage generates a valid PNG file with shadow text',
+      (tester) async {
     await tester.runAsync(() async {
       final ffmpeg = FFmpegService();
       final tempDir = Directory.systemTemp;
-      final outPath = '${tempDir.path}/test_watermark_${DateTime.now().millisecondsSinceEpoch}.png';
+      final outPath =
+          '${tempDir.path}/test_watermark_${DateTime.now().millisecondsSinceEpoch}.png';
 
       final resultPath = await ffmpeg.createWatermarkImage(
         text: 'ដោយ.B.T.movie',

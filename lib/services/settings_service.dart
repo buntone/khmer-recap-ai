@@ -126,5 +126,6 @@ class SettingsService {
 
   String get watermarkText =>
       _prefs.getString(keyWatermarkText) ?? defaultWatermarkText;
-  set watermarkText(String val) => _prefs.setString(keyWatermarkText, val.trim());
+  set watermarkText(String val) =>
+      _prefs.setString(keyWatermarkText, val.trim());
 }

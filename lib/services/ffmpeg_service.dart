@@ -132,7 +132,7 @@ class FFmpegService {
     }
   }
 
-  /// Generates a transparent PNG image of the watermark text with rich shadow for video overlay
+  /// Generates a transparent PNG image of the watermark text with sharp, crisp edges and black outline (zero blur)
   Future<String> createWatermarkImage({
     required String text,
     String? outputPath,
@@ -149,37 +149,45 @@ class FFmpegService {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
-    final textSpan = TextSpan(
+    // 1. Crisp black outline stroke with zero blur (sharp, non-bleeding border)
+    final outlineSpan = TextSpan(
+      text: text,
+      style: TextStyle(
+        fontSize: 32,
+        fontWeight: FontWeight.bold,
+        foreground: Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.5
+          ..color = const Color(0xFF000000),
+      ),
+    );
+    final outlinePainter = TextPainter(
+      text: outlineSpan,
+      textDirection: TextDirection.ltr,
+    );
+    outlinePainter.layout();
+
+    // 2. Pure white fill (sharp & clear)
+    final fillSpan = TextSpan(
       text: text,
       style: const TextStyle(
         color: Colors.white,
-        fontSize: 26,
+        fontSize: 32,
         fontWeight: FontWeight.bold,
-        shadows: [
-          Shadow(
-            color: Color(0xDD000000), // Solid dark drop shadow
-            offset: Offset(2.5, 2.5),
-            blurRadius: 4.0,
-          ),
-          Shadow(
-            color: Color(0x99000000),
-            offset: Offset(-1.0, -1.0),
-            blurRadius: 2.0,
-          ),
-        ],
       ),
     );
-
-    final textPainter = TextPainter(
-      text: textSpan,
+    final fillPainter = TextPainter(
+      text: fillSpan,
       textDirection: TextDirection.ltr,
     );
-    textPainter.layout();
+    fillPainter.layout();
 
-    final width = (textPainter.width + 30).ceil();
-    final height = (textPainter.height + 20).ceil();
+    final width = (outlinePainter.width + 30).ceil();
+    final height = (outlinePainter.height + 20).ceil();
 
-    textPainter.paint(canvas, const Offset(15, 10));
+    const offset = Offset(15, 10);
+    outlinePainter.paint(canvas, offset);
+    fillPainter.paint(canvas, offset);
 
     final picture = recorder.endRecording();
     final img = await picture.toImage(width, height);
@@ -192,12 +200,12 @@ class FFmpegService {
   }
 
   /// Merges the newly synthesized Khmer voice with original video,
-  /// ducking the original Chinese audio to [duckingVolume] (e.g. 0.15 = 15%).
+  /// stripping out Chinese spoken dialogue and preserving background music/SFX underneath.
   /// Applies moving / bouncing watermark logo across the video continuously if [watermarkText] is provided.
   Future<String> mergeKhmerVoiceWithVideo({
     required String originalVideoPath,
     required String khmerAudioPath,
-    required double duckingVolume, // 0.0 (mute) to 1.0 (full)
+    required double duckingVolume, // 0.0 to 1.0
     String? watermarkText,
     Function(int progressPercentage)? onProgress,
   }) async {
@@ -205,7 +213,12 @@ class FFmpegService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final outputVideoPath = '${tempDir.path}/khmer_recap_output_$timestamp.mp4';
 
-    final bgVolume = duckingVolume.clamp(0.0, 1.0).toStringAsFixed(2);
+    // Vocal cancellation filter: cancels center Chinese speech while keeping stereo background sound
+    final bgVolume = (duckingVolume > 0.0 ? duckingVolume : 0.22)
+        .clamp(0.05, 0.40)
+        .toStringAsFixed(2);
+    final bgAudioFilter =
+        '[0:a]aformat=channel_layouts=stereo,pan=stereo|c0=0.5*c0-0.5*c1|c1=0.5*c1-0.5*c0,volume=$bgVolume[bg];[1:a]volume=1.35[khmer];[khmer][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]';
 
     // Check if original video has audio track first
     final mediaInfo = await FFprobeKit.getMediaInformation(originalVideoPath);
@@ -227,16 +240,16 @@ class FFmpegService {
 
     String cmd;
     if (watermarkImgPath != null) {
-      // Overlay moving/bouncing watermark continuously across the video with shadow text
+      // Overlay moving/bouncing watermark continuously across the video
       // x oscillates smoothly between 20 and W-w-20
       // y oscillates smoothly between 25 and H-h-25
       const overlayMotion =
           "[0:v][2:v]overlay=x='20+(W-w-40)*(0.5+0.5*sin(t*0.6))':y='25+(H-h-50)*(0.5+0.5*cos(t*0.45))'[vout]";
 
-      if (hasOriginalAudio && duckingVolume >= 0.02) {
+      if (hasOriginalAudio) {
         cmd =
             '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" -i "$watermarkImgPath" '
-            '-filter_complex "$overlayMotion;[0:a]volume=$bgVolume[bg];[1:a]volume=1.35[khmer];[khmer][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]" '
+            '-filter_complex "$overlayMotion;$bgAudioFilter" '
             '-map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
       } else {
         cmd =
@@ -245,9 +258,9 @@ class FFmpegService {
             '-map "[vout]" -map 1:a:0 -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
       }
     } else {
-      if (hasOriginalAudio && duckingVolume >= 0.02) {
+      if (hasOriginalAudio) {
         cmd = '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" '
-            '-filter_complex "[0:a]volume=$bgVolume[bg];[1:a]volume=1.35[khmer];[khmer][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]" '
+            '-filter_complex "$bgAudioFilter" '
             '-map 0:v:0 -map "[aout]" -c:v copy -c:a aac -b:a 192k -shortest "$outputVideoPath"';
       } else {
         cmd = '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" '
@@ -263,10 +276,10 @@ class FFmpegService {
     } else {
       // If stream copy failed due to container flags, fallback to re-encoding with H.264
       String fallbackCmd;
-      if (hasOriginalAudio && duckingVolume >= 0.02) {
+      if (hasOriginalAudio) {
         fallbackCmd =
             '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" '
-            '-filter_complex "[0:a]volume=$bgVolume[bg];[1:a]volume=1.35[khmer];[khmer][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]" '
+            '-filter_complex "$bgAudioFilter" '
             '-map 0:v:0 -map "[aout]" -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
       } else {
         fallbackCmd =

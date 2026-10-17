@@ -166,11 +166,11 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       );
 
-      // Step 5: Merge final audio with video (audio ducking)
+      // Step 5: Merge final audio with video (audio ducking & vocal isolation)
       setState(() {
         _currentStage = ProcessingStage.mergingAudioVideo;
         _statusMessage =
-            'កំពុងច្របាច់បញ្ចូលសំឡេងខ្មែរជាមួយវីដេអូ (Audio Ducking: ${(_duckingVolume * 100).toInt()}%)...';
+            'កំពុងច្របាច់បញ្ចូលសំឡេងខ្មែរជាមួយវីដេអូ និងកាត់សំឡេងចិនដើម...';
       });
 
       final dubbedVideoPath = await _ffmpegService.mergeKhmerVoiceWithVideo(
@@ -333,11 +333,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // Voice Selector Section
             _buildVoiceSelectorCard(),
-
-            const SizedBox(height: 20),
-
-            // Background Music / Original Audio Ducking Slider
-            _buildAudioDuckingCard(),
 
             const SizedBox(height: 24),
 
@@ -712,122 +707,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAudioDuckingCard() {
-    final isMuted = _duckingVolume <= 0.01;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isMuted ? const Color(0xFF10B981) : Colors.white10,
-          width: isMuted ? 1.5 : 1.0,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Icon(
-                      isMuted
-                          ? Icons.volume_off_rounded
-                          : Icons.volume_down_rounded,
-                      color: isMuted ? Colors.greenAccent : Colors.tealAccent,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'កម្រិតសំឡេងចិនដើម',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: isMuted
-                      ? Colors.greenAccent.withValues(alpha: 0.15)
-                      : Colors.tealAccent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  isMuted ? 'បិទឈឹង 0%' : '${(_duckingVolume * 100).toInt()}%',
-                  style: TextStyle(
-                    color: isMuted ? Colors.greenAccent : Colors.tealAccent,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: isMuted ? Colors.white24 : Colors.tealAccent,
-              inactiveTrackColor: Colors.white12,
-              thumbColor: isMuted ? Colors.greenAccent : Colors.tealAccent,
-              overlayColor: Colors.tealAccent.withValues(alpha: 0.2),
-            ),
-            child: Slider(
-              value: _duckingVolume,
-              min: 0.0,
-              max: 1.0,
-              divisions: 20,
-              onChanged: (val) => setState(() => _duckingVolume = val),
-            ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton.icon(
-                onPressed: () => setState(() => _duckingVolume = 0.0),
-                icon: const Icon(Icons.volume_mute_rounded,
-                    size: 16, color: Colors.greenAccent),
-                label: const FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    'បិទសំឡេងចិន (0% Mute)',
-                    style: TextStyle(
-                        color: Colors.greenAccent,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  backgroundColor: isMuted
-                      ? Colors.greenAccent.withValues(alpha: 0.1)
-                      : Colors.white10,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-              const Text('100% (សំឡេងពេញ)',
-                  style: TextStyle(color: Colors.white38, fontSize: 10)),
             ],
           ),
         ],
