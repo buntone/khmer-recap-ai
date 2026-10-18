@@ -669,11 +669,11 @@ class FFmpegService {
     final String bgAudioFilter;
     if (vol <= 0.01) {
       // Ducking is 0%: Mute original audio completely for 100% pure, crystal-clear Khmer voice
-      bgAudioFilter = '[1:a]volume=1.25,apad[aout]';
+      bgAudioFilter = '[1:a]volume=1.25[aout]';
     } else {
       final bgVolStr = vol.toStringAsFixed(2);
       bgAudioFilter =
-          '[0:a]volume=$bgVolStr[bg];[1:a]volume=1.25[khmer];[khmer][bg]amix=inputs=2:duration=longest:dropout_transition=0[aout]';
+          '[0:a]volume=$bgVolStr[bg];[1:a]volume=1.25[khmer];[bg][khmer]amix=inputs=2:duration=first:dropout_transition=0[aout]';
     }
 
     final videoMeta = await probeVideo(originalVideoPath);
