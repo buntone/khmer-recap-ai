@@ -95,7 +95,7 @@ class KhmerTtsService {
     final List<List<int>?> rawBytesList = List.filled(totalSegments, null);
     int completedTts = 0;
 
-    // 1. Parallel TTS Synthesis with concurrency pool of 4
+    // 1. Parallel TTS Synthesis with concurrency pool of 2 to avoid server WebSocket throttling
     Future<void> synthesizeWorker(List<int> indices) async {
       for (final idx in indices) {
         final seg = segments[idx];
@@ -119,19 +119,21 @@ class KhmerTtsService {
       }
     }
 
-    const concurrency = 4;
+    const concurrency = 2;
     final workerBuckets = List.generate(concurrency, (_) => <int>[]);
     for (int i = 0; i < totalSegments; i++) {
       workerBuckets[i % concurrency].add(i);
     }
     await Future.wait(
-      workerBuckets
-          .where((bucket) => bucket.isNotEmpty)
-          .map((bucket) => synthesizeWorker(bucket)),
+      List.generate(workerBuckets.length, (bIdx) async {
+        if (workerBuckets[bIdx].isEmpty) return;
+        if (bIdx > 0) await Future.delayed(Duration(milliseconds: 60 * bIdx));
+        await synthesizeWorker(workerBuckets[bIdx]);
+      }),
     );
 
-    final List<File> chunkFiles = [];
-    final List<double> chunkDurations = [];
+    // Map chunk files by their EXACT segment index to prevent ANY index desynchronization!
+    final Map<int, File> chunkFilesMap = {};
 
     // 2. Normalize chunks and calculate accurate durations
     for (int i = 0; i < totalSegments; i++) {
@@ -171,7 +173,7 @@ class KhmerTtsService {
         }
       }
 
-      // Dynamic Speech Rate Adaptation & Strict Anti-Overlap:
+      // Dynamic Speech Rate Adaptation:
       final currentStart = (seg.startSeconds + syncDelaySeconds)
           .clamp(0.0, totalDurationSeconds);
       final nextStart = (i + 1 < totalSegments)
@@ -190,13 +192,12 @@ class KhmerTtsService {
       }
 
       File finalChunkFile = actualFile;
-      double finalDur = dur;
 
       if (availableWindow > 0.3 && dur > (availableWindow - 0.12)) {
         final targetDuration =
             (availableWindow - 0.15).clamp(0.35, availableWindow - 0.05);
         double speedRatio = dur / targetDuration;
-        speedRatio = speedRatio.clamp(1.05, 2.2);
+        speedRatio = speedRatio.clamp(1.05, 2.0);
 
         String tempoFilter;
         if (speedRatio <= 2.0) {
@@ -213,12 +214,10 @@ class KhmerTtsService {
         if (ReturnCode.isSuccess(await tempoSession.getReturnCode()) &&
             await tempoFile.exists()) {
           finalChunkFile = tempoFile;
-          finalDur = _getWavDuration(await tempoFile.length());
         }
       }
 
-      chunkFiles.add(finalChunkFile);
-      chunkDurations.add(finalDur);
+      chunkFilesMap[i] = finalChunkFile;
 
       onProgress?.call(
         0.7 + (((i + 1) / totalSegments) * 0.3),
@@ -227,7 +226,7 @@ class KhmerTtsService {
       );
     }
 
-    if (chunkFiles.isEmpty) {
+    if (chunkFilesMap.isEmpty) {
       throw Exception(
           'បរាជ័យក្នុងការបង្កើតសំឡេង (Failed to generate voice clips).');
     }
@@ -241,11 +240,12 @@ class KhmerTtsService {
     final totalSamples = (totalDurationSeconds * sampleRate).round();
     final totalPcmBytes = totalSamples * channels * bytesPerSample;
     final masterPcm = Uint8List(totalPcmBytes); // Initialized with 0 (clean digital silence)
+    final masterBd = ByteData.view(masterPcm.buffer);
 
-    for (int i = 0; i < chunkFiles.length && i < segments.length; i++) {
+    for (int i = 0; i < totalSegments; i++) {
       final seg = segments[i];
-      final chunkFile = chunkFiles[i];
-      if (!await chunkFile.exists()) continue;
+      final chunkFile = chunkFilesMap[i];
+      if (chunkFile == null || !await chunkFile.exists()) continue;
 
       final chunkRawBytes = await chunkFile.readAsBytes();
       if (chunkRawBytes.length <= 44) continue;
@@ -262,20 +262,11 @@ class KhmerTtsService {
       final startSample = (targetStart * sampleRate).round();
       if (startSample >= totalSamples) continue;
 
-      // Calculate max samples available before the next line begins
-      int maxAvailableSamples = totalSamples - startSample;
-      if (i + 1 < segments.length) {
-        final nextStart = (segments[i + 1].startSeconds + syncDelaySeconds)
-            .clamp(0.0, totalDurationSeconds);
-        final nextStartSample = (nextStart * sampleRate).round();
-        if (nextStartSample > startSample) {
-          maxAvailableSamples = nextStartSample - startSample;
-        }
-      }
-
-      final copySamples = chunkSampleCount <= maxAvailableSamples
+      // Calculate available samples to the end of the video timeline
+      final availableSamplesToEnd = totalSamples - startSample;
+      final copySamples = chunkSampleCount <= availableSamplesToEnd
           ? chunkSampleCount
-          : maxAvailableSamples;
+          : availableSamplesToEnd;
       if (copySamples <= 0) continue;
 
       final bytesToCopy = copySamples * bytesPerSample;
@@ -294,10 +285,7 @@ class KhmerTtsService {
       }
 
       // 2. Smooth 10ms micro-fade OUT (240 samples at 24kHz) at end of speech segment
-      // (or 25ms / 600 samples if truncated before next speaker)
-      final outFade = copySamples < chunkSampleCount
-          ? (copySamples < 600 ? copySamples : 600)
-          : (copySamples < 240 ? copySamples : 240);
+      final outFade = copySamples < 240 ? copySamples : 240;
       final outStart = copySamples - outFade;
       for (int s = 0; s < outFade; s++) {
         final sampleOffset = (outStart + s) * bytesPerSample;
@@ -306,13 +294,15 @@ class KhmerTtsService {
         bdSlice.setInt16(sampleOffset, (val * factor).round().clamp(-32768, 32767), Endian.little);
       }
 
-      final masterStartByte = startSample * bytesPerSample;
-      if (masterStartByte + bytesToCopy <= totalPcmBytes) {
-        masterPcm.setRange(
-          masterStartByte,
-          masterStartByte + bytesToCopy,
-          pcmSlice,
-        );
+      // 3. Additive PCM Mixing with saturation clamping:
+      // Guarantees all sentences are fully audible and prevents abrupt truncation or silence dropouts!
+      for (int s = 0; s < copySamples; s++) {
+        final targetOffset = (startSample + s) * bytesPerSample;
+        if (targetOffset + 2 > totalPcmBytes) break;
+        final existing = masterBd.getInt16(targetOffset, Endian.little);
+        final incoming = bdSlice.getInt16(s * bytesPerSample, Endian.little);
+        final mixed = (existing + incoming).clamp(-32768, 32767);
+        masterBd.setInt16(targetOffset, mixed, Endian.little);
       }
     }
 
@@ -376,7 +366,10 @@ class KhmerTtsService {
       return masterWavFile.path;
     }
 
-    return chunkFiles.first.path;
+    if (chunkFilesMap.isNotEmpty) {
+      return chunkFilesMap.values.first.path;
+    }
+    return masterWavFile.path;
   }
 
   /// Calculates exact duration of 24000Hz 16-bit mono PCM WAV instantly (48,000 bytes/sec)
@@ -748,36 +741,46 @@ class KhmerTtsService {
     return segments;
   }
 
-  /// Sends request to Microsoft Edge Neural TTS or Custom Khmer TTS engine
+  /// Sends request to Microsoft Edge Neural TTS or Custom Khmer TTS engine with auto-retry
   Future<List<int>> _callTtsEndpoint({
     required String text,
     required String voiceId,
     required double speed,
     required double pitch,
   }) async {
-    // 1. Primary High-Quality Natural Voice: Microsoft Neural Edge-TTS v2 (Piseth & Sreymom)
-    try {
-      final selectedEdgeVoice = voiceId.toLowerCase().contains('sreymom')
-          ? 'km-KH-SreymomNeural'
-          : 'km-KH-PisethNeural';
-
-      final ratePercent = ((speed - 1.0) * 100).round();
-      final rateStr = ratePercent >= 0 ? '+$ratePercent%' : '$ratePercent%';
-
-      final audioBytes = await EdgeTtsV2.synthesize(
-        text: text.trim(),
-        voice: selectedEdgeVoice,
-        rate: rateStr,
-      );
-
-      if (audioBytes.isNotEmpty) {
-        return audioBytes;
-      }
-    } catch (_) {
-      // Fallback if Edge-TTS has connection issue
+    final cleanText = text.trim();
+    if (cleanText.isEmpty) {
+      return [];
     }
 
-    // 2. Custom User-Configured REST Endpoint (e.g., KhmerVoice.ai, CamCyber)
+    // 1. Primary: Microsoft Neural Edge-TTS v2 (Piseth & Sreymom) with 3 retries
+    final selectedEdgeVoice = voiceId.toLowerCase().contains('sreymom')
+        ? 'km-KH-SreymomNeural'
+        : 'km-KH-PisethNeural';
+
+    final ratePercent = ((speed - 1.0) * 100).round();
+    final rateStr = ratePercent >= 0 ? '+$ratePercent%' : '$ratePercent%';
+
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final audioBytes = await EdgeTtsV2.synthesize(
+          text: cleanText,
+          voice: selectedEdgeVoice,
+          rate: rateStr,
+        );
+
+        if (audioBytes.isNotEmpty && audioBytes.length > 300) {
+          return audioBytes;
+        }
+      } catch (e) {
+        debugPrint('Edge-TTS attempt $attempt failed for "$cleanText": $e');
+        if (attempt < 3) {
+          await Future.delayed(Duration(milliseconds: 200 * attempt));
+        }
+      }
+    }
+
+    // 2. Custom User-Configured REST Endpoint (if configured)
     if (endpoint.isNotEmpty && !endpoint.contains('api.khmervoice.ai')) {
       final uri = Uri.parse(endpoint);
       final headers = {
@@ -789,7 +792,7 @@ class KhmerTtsService {
       };
 
       final body = jsonEncode({
-        'text': text,
+        'text': cleanText,
         'voice': voiceId,
         'voice_id': voiceId,
         'language': 'km-KH',
@@ -831,21 +834,49 @@ class KhmerTtsService {
       } catch (_) {}
     }
 
-    // 3. Fallback: Google Khmer TTS (Fast and reliable backup)
+    // 3. Fallback: Google Khmer TTS with clause splitting (handles long Khmer sentences)
     try {
-      final encodedText = Uri.encodeComponent(text.trim());
-      final gTtsUri = Uri.parse(
-        'https://translate.google.com/translate_tts?ie=UTF-8&tl=km&client=tw-ob&q=$encodedText',
-      );
-      final gResponse = await http.get(
-        gTtsUri,
-        headers: {'User-Agent': 'Mozilla/5.0 (Android; Mobile)'},
-      ).timeout(const Duration(seconds: 10));
-
-      if (gResponse.statusCode == 200 && gResponse.bodyBytes.isNotEmpty) {
-        return gResponse.bodyBytes;
+      final subClauses = <String>[];
+      if (cleanText.length <= 80) {
+        subClauses.add(cleanText);
+      } else {
+        var rem = cleanText;
+        while (rem.length > 80) {
+          int cut = rem.lastIndexOf(' ', 80);
+          if (cut <= 20) cut = 80;
+          subClauses.add(rem.substring(0, cut).trim());
+          rem = rem.substring(cut).trim();
+        }
+        if (rem.isNotEmpty) subClauses.add(rem);
       }
-    } catch (_) {}
+
+      final combined = BytesBuilder(copy: false);
+      for (final clause in subClauses) {
+        if (clause.isEmpty) continue;
+        final encodedText = Uri.encodeComponent(clause);
+        final gTtsUri = Uri.parse(
+          'https://translate.google.com/translate_tts?ie=UTF-8&tl=km&client=tw-ob&q=$encodedText',
+        );
+        final gResponse = await http.get(
+          gTtsUri,
+          headers: {
+            'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          },
+        ).timeout(const Duration(seconds: 8));
+
+        if (gResponse.statusCode == 200 && gResponse.bodyBytes.length > 80) {
+          combined.add(gResponse.bodyBytes);
+        }
+      }
+
+      final resultBytes = combined.toBytes();
+      if (resultBytes.isNotEmpty && resultBytes.length > 300) {
+        return resultBytes;
+      }
+    } catch (e) {
+      debugPrint('Google Khmer TTS fallback error: $e');
+    }
 
     throw Exception(
         'មិនអាចទាញយកសំឡេងអានជាភាសាខ្មែរបានឡើយ (Failed to synthesize Khmer speech).');

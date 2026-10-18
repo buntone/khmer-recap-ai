@@ -791,9 +791,17 @@ class EdgeTtsV2 {
       final result =
           await completer.future.timeout(const Duration(seconds: 15));
       return result;
+    } on TimeoutException {
+      final partial = builder.toBytes();
+      if (partial.length > 500) {
+        return partial;
+      }
+      rethrow;
     } finally {
       await sub.cancel();
-      await ws.close();
+      try {
+        await ws.close();
+      } catch (_) {}
     }
   }
 }
