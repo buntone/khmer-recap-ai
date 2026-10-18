@@ -207,7 +207,9 @@ class _HomeScreenState extends State<HomeScreen> {
           dubbedVideoPath,
           customName: '${baseName}_Recap_$timestamp',
         );
-        finalGalleryVideoPath = savedPath;
+        if (!savedPath.startsWith('content://') && await File(savedPath).exists()) {
+          finalGalleryVideoPath = savedPath;
+        }
       } catch (e) {
         debugPrint('Auto-save to gallery warning: $e');
       }

@@ -189,16 +189,37 @@ class _ResultScreenState extends State<ResultScreen> {
         isSuccess: true);
   }
 
+  String _formatDuration(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  void _onPlayerTick() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _initVideoPlayer(String path) async {
+    _videoPlayerController?.removeListener(_onPlayerTick);
     await _videoPlayerController?.dispose();
-    _videoPlayerController = VideoPlayerController.file(File(path));
+
+    var playablePath = path;
+    if (playablePath.startsWith('content://') || !await File(playablePath).exists()) {
+      if (await File(widget.dubbedVideoPath).exists()) {
+        playablePath = widget.dubbedVideoPath;
+      }
+    }
+
+    _videoPlayerController = VideoPlayerController.file(File(playablePath));
     await _videoPlayerController!.initialize();
+    _videoPlayerController!.addListener(_onPlayerTick);
     await _videoPlayerController!.play();
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _videoPlayerController?.removeListener(_onPlayerTick);
     _videoPlayerController?.dispose();
     _scriptController.dispose();
     super.dispose();
@@ -1050,6 +1071,25 @@ class _ResultScreenState extends State<ResultScreen> {
                                   : _videoPlayerController!.play();
                             });
                           },
+                        ),
+                        Positioned(
+                          bottom: 6,
+                          right: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.65),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${_formatDuration(_videoPlayerController!.value.position)} / ${_formatDuration(_videoPlayerController!.value.duration)}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
                         ),
                         Positioned(
                           bottom: 0,

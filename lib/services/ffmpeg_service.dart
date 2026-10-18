@@ -45,12 +45,23 @@ class FFmpegService {
       );
     }
 
-    final durationStr = info.getDuration() ?? '60';
-    final duration = double.tryParse(durationStr) ?? 60.0;
+    final streams = info.getStreams();
+    double duration = double.tryParse(info.getDuration() ?? '') ?? 0.0;
+    if (duration <= 0.5) {
+      for (final s in streams) {
+        final sDur = double.tryParse(s.getStringProperty('duration') ?? '') ??
+            (s.getNumberProperty('duration')?.toDouble() ?? 0.0);
+        if (sDur > duration) {
+          duration = sDur;
+        }
+      }
+    }
+    if (duration <= 0.5) {
+      duration = 60.0;
+    }
 
     int width = 1280;
     int height = 720;
-    final streams = info.getStreams();
     for (final s in streams) {
       if (s.getType() == 'video') {
         width = s.getWidth() ?? 1280;
@@ -658,11 +669,11 @@ class FFmpegService {
     final String bgAudioFilter;
     if (vol <= 0.01) {
       // Ducking is 0%: Mute original audio completely for 100% pure, crystal-clear Khmer voice
-      bgAudioFilter = '[1:a]volume=1.25[aout]';
+      bgAudioFilter = '[1:a]volume=1.25,apad[aout]';
     } else {
       final bgVolStr = vol.toStringAsFixed(2);
       bgAudioFilter =
-          '[0:a]volume=$bgVolStr[bg];[1:a]volume=1.25[khmer];[khmer][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]';
+          '[0:a]volume=$bgVolStr[bg];[1:a]volume=1.25[khmer];[khmer][bg]amix=inputs=2:duration=longest:dropout_transition=0[aout]';
     }
 
     final videoMeta = await probeVideo(originalVideoPath);
@@ -847,7 +858,11 @@ class FFmpegService {
           'title': title,
         });
         if (nativeResult is String && nativeResult.isNotEmpty) {
-          targetPath = nativeResult;
+          if (!nativeResult.startsWith('content://') && await File(nativeResult).exists()) {
+            targetPath = nativeResult;
+          } else {
+            targetPath = srcVideoPath;
+          }
           return targetPath; // Return immediately to guarantee single gallery entry!
         }
       } catch (e) {

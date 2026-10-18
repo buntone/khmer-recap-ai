@@ -95,42 +95,30 @@ class KhmerTtsService {
     final List<List<int>?> rawBytesList = List.filled(totalSegments, null);
     int completedTts = 0;
 
-    // 1. Parallel TTS Synthesis with concurrency pool of 2 to avoid server WebSocket throttling
-    Future<void> synthesizeWorker(List<int> indices) async {
-      for (final idx in indices) {
-        final seg = segments[idx];
-        try {
-          final bytes = await _callTtsEndpoint(
-            text: seg.text,
-            voiceId: seg.voiceId,
-            speed: speed,
-            pitch: pitch,
-          );
-          rawBytesList[idx] = bytes;
-        } catch (e) {
-          debugPrint('TTS segment $idx failed: $e');
-        }
-        completedTts++;
-        onProgress?.call(
-          (completedTts / totalSegments) * 0.7,
-          completedTts,
-          totalSegments,
+    // 1. Sequential TTS Synthesis with gentle 80ms pacing to eliminate server WebSocket throttling
+    for (int idx = 0; idx < totalSegments; idx++) {
+      final seg = segments[idx];
+      try {
+        final bytes = await _callTtsEndpoint(
+          text: seg.text,
+          voiceId: seg.voiceId,
+          speed: speed,
+          pitch: pitch,
         );
+        rawBytesList[idx] = bytes;
+      } catch (e) {
+        debugPrint('TTS segment $idx failed: $e');
+      }
+      completedTts++;
+      onProgress?.call(
+        (completedTts / totalSegments) * 0.7,
+        completedTts,
+        totalSegments,
+      );
+      if (idx + 1 < totalSegments) {
+        await Future.delayed(const Duration(milliseconds: 80));
       }
     }
-
-    const concurrency = 2;
-    final workerBuckets = List.generate(concurrency, (_) => <int>[]);
-    for (int i = 0; i < totalSegments; i++) {
-      workerBuckets[i % concurrency].add(i);
-    }
-    await Future.wait(
-      List.generate(workerBuckets.length, (bIdx) async {
-        if (workerBuckets[bIdx].isEmpty) return;
-        if (bIdx > 0) await Future.delayed(Duration(milliseconds: 60 * bIdx));
-        await synthesizeWorker(workerBuckets[bIdx]);
-      }),
-    );
 
     // Map chunk files by their EXACT segment index to prevent ANY index desynchronization!
     final Map<int, File> chunkFilesMap = {};
@@ -834,16 +822,16 @@ class KhmerTtsService {
       } catch (_) {}
     }
 
-    // 3. Fallback: Google Khmer TTS with clause splitting (handles long Khmer sentences)
+    // 3. Fallback: Google Khmer TTS with clause splitting and multi-client fallback
     try {
       final subClauses = <String>[];
-      if (cleanText.length <= 80) {
+      if (cleanText.length <= 70) {
         subClauses.add(cleanText);
       } else {
         var rem = cleanText;
-        while (rem.length > 80) {
-          int cut = rem.lastIndexOf(' ', 80);
-          if (cut <= 20) cut = 80;
+        while (rem.length > 70) {
+          int cut = rem.lastIndexOf(' ', 70);
+          if (cut <= 15) cut = 70;
           subClauses.add(rem.substring(0, cut).trim());
           rem = rem.substring(cut).trim();
         }
@@ -851,27 +839,56 @@ class KhmerTtsService {
       }
 
       final combined = BytesBuilder(copy: false);
+      const googleClients = ['gtx', 'tw-ob', 'dict-chrome-ex'];
+
       for (final clause in subClauses) {
         if (clause.isEmpty) continue;
         final encodedText = Uri.encodeComponent(clause);
-        final gTtsUri = Uri.parse(
-          'https://translate.google.com/translate_tts?ie=UTF-8&tl=km&client=tw-ob&q=$encodedText',
-        );
-        final gResponse = await http.get(
-          gTtsUri,
-          headers: {
-            'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          },
-        ).timeout(const Duration(seconds: 8));
+        bool clauseSucceeded = false;
 
-        if (gResponse.statusCode == 200 && gResponse.bodyBytes.length > 80) {
-          combined.add(gResponse.bodyBytes);
+        for (final clientType in googleClients) {
+          try {
+            final gTtsUri = Uri.parse(
+              'https://translate.googleapis.com/translate_tts?ie=UTF-8&tl=km&client=$clientType&q=$encodedText',
+            );
+            final gResponse = await http.get(
+              gTtsUri,
+              headers: {
+                'User-Agent':
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              },
+            ).timeout(const Duration(seconds: 7));
+
+            if (gResponse.statusCode == 200 && gResponse.bodyBytes.length > 80) {
+              combined.add(gResponse.bodyBytes);
+              clauseSucceeded = true;
+              break;
+            }
+          } catch (_) {}
+        }
+
+        if (!clauseSucceeded) {
+          // Retry once with fallback domain translate.google.com
+          try {
+            final fallbackUri = Uri.parse(
+              'https://translate.google.com/translate_tts?ie=UTF-8&tl=km&client=tw-ob&q=$encodedText',
+            );
+            final fallbackRes = await http.get(
+              fallbackUri,
+              headers: {
+                'User-Agent':
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              },
+            ).timeout(const Duration(seconds: 7));
+            if (fallbackRes.statusCode == 200 && fallbackRes.bodyBytes.length > 80) {
+              combined.add(fallbackRes.bodyBytes);
+            }
+          } catch (_) {}
         }
       }
 
       final resultBytes = combined.toBytes();
-      if (resultBytes.isNotEmpty && resultBytes.length > 300) {
+      if (resultBytes.isNotEmpty && resultBytes.length > 200) {
         return resultBytes;
       }
     } catch (e) {

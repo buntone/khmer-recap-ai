@@ -87,7 +87,8 @@ class MainActivity : FlutterActivity() {
                             } catch (_: Exception) {}
                         }
 
-                        result.success(savedFilePath ?: savedUri?.toString() ?: srcPath)
+                        // Return real physical file path for playback, never a content:// URI!
+                        result.success(savedFilePath ?: srcPath)
                     } catch (e: Exception) {
                         result.error("SAVE_FAILED", e.localizedMessage, null)
                     }
