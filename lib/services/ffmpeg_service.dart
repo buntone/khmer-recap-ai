@@ -14,12 +14,16 @@ class VideoMetadata {
   final int width;
   final int height;
   final String format;
+  final int audioChannels;
+  final bool hasAudio;
 
   VideoMetadata({
     required this.durationSeconds,
     required this.width,
     required this.height,
     required this.format,
+    this.audioChannels = 2,
+    this.hasAudio = true,
   });
 
   String get resolutionFormatted => '${width}x$height';
@@ -31,7 +35,7 @@ class VideoMetadata {
 }
 
 class FFmpegService {
-  /// Extracts metadata (duration, width, height) from the input video file
+  /// Extracts metadata (duration, width, height, audio channels) from the input video file
   Future<VideoMetadata> probeVideo(String videoPath) async {
     final mediaInfo = await FFprobeKit.getMediaInformation(videoPath);
     final info = mediaInfo.getMediaInformation();
@@ -42,6 +46,8 @@ class FFmpegService {
         width: 1280,
         height: 720,
         format: 'mp4',
+        audioChannels: 2,
+        hasAudio: true,
       );
     }
 
@@ -62,11 +68,20 @@ class FFmpegService {
 
     int width = 1280;
     int height = 720;
+    int audioChannels = 2;
+    bool hasAudio = false;
+
     for (final s in streams) {
       if (s.getType() == 'video') {
         width = s.getWidth() ?? 1280;
         height = s.getHeight() ?? 720;
-        break;
+      } else if (s.getType() == 'audio') {
+        hasAudio = true;
+        final ch = s.getNumberProperty('channels')?.toInt() ??
+            int.tryParse(s.getStringProperty('channels') ?? '');
+        if (ch != null && ch > 0) {
+          audioChannels = ch;
+        }
       }
     }
 
@@ -75,6 +90,8 @@ class FFmpegService {
       width: width,
       height: height,
       format: info.getFormat() ?? 'mp4',
+      audioChannels: audioChannels,
+      hasAudio: hasAudio,
     );
   }
 
@@ -648,6 +665,7 @@ class FFmpegService {
     required String originalVideoPath,
     required String khmerAudioPath,
     required double duckingVolume, // 0.0 to 1.0
+    bool removeChineseVocals = true, // Removes spoken Chinese voice, preserving BGM/SFX
     String? watermarkText,
     String? watermarkFont,
     String? watermarkColor,
@@ -664,27 +682,40 @@ class FFmpegService {
     // Register Android system Khmer fonts with FFmpegKit's fontconfig so subtitles render crisp glyphs
     await ensureKhmerFontRegistered();
 
-    // Clean audio ducking filter without phase-cancellation clicking / ticking artifacts
+    final videoMeta = await probeVideo(originalVideoPath);
+    final hasOriginalAudio = videoMeta.hasAudio;
+
+    // Clean audio ducking filter with intelligent Chinese vocal cancellation
     final double vol = duckingVolume.clamp(0.0, 1.0);
     final String bgAudioFilter;
     if (vol <= 0.01) {
       // Ducking is 0%: Mute original audio completely for 100% pure, crystal-clear Khmer voice
       bgAudioFilter = '[1:a]volume=1.25[aout]';
+    } else if (removeChineseVocals) {
+      final bgVolStr = vol.toStringAsFixed(2);
+      if (videoMeta.audioChannels >= 2) {
+        // High-precision Mid-Side vocal cancellation with sub-bass preservation:
+        // Mid (center channel) speech is suppressed by 36dB while preserving stereo BGM, instruments & sound effects!
+        bgAudioFilter =
+            '[0:a]aformat=channel_layouts=stereo,asplit=2[bg_low][bg_high];'
+            '[bg_low]lowpass=f=200,volume=0.85[bg_bass];'
+            '[bg_high]highpass=f=200,stereotools=mlev=0.015625:slev=1.35[bg_sides];'
+            '[bg_bass][bg_sides]amix=inputs=2:dropout_transition=0,volume=$bgVolStr[bg];'
+            '[1:a]volume=1.25[khmer];'
+            '[bg][khmer]amix=inputs=2:duration=first:dropout_transition=0[aout]';
+      } else {
+        // Mono voice rejection notch filter (reduces human speech frequencies 250Hz - 3500Hz)
+        bgAudioFilter =
+            '[0:a]equalizer=f=1200:width_type=o:w=2.5:g=-16,equalizer=f=2800:width_type=o:w=1.8:g=-14,volume=$bgVolStr[bg];'
+            '[1:a]volume=1.25[khmer];'
+            '[bg][khmer]amix=inputs=2:duration=first:dropout_transition=0[aout]';
+      }
     } else {
       final bgVolStr = vol.toStringAsFixed(2);
       bgAudioFilter =
-          '[0:a]volume=$bgVolStr[bg];[1:a]volume=1.25[khmer];[bg][khmer]amix=inputs=2:duration=first:dropout_transition=0[aout]';
+          '[0:a]volume=$bgVolStr[bg];[1:a]volume=1.25[khmer];'
+          '[bg][khmer]amix=inputs=2:duration=first:dropout_transition=0[aout]';
     }
-
-    final videoMeta = await probeVideo(originalVideoPath);
-
-    // Check if original video has audio track first
-    final mediaInfo = await FFprobeKit.getMediaInformation(originalVideoPath);
-    final hasOriginalAudio = mediaInfo
-            .getMediaInformation()
-            ?.getStreams()
-            .any((s) => s.getType() == 'audio') ??
-        false;
 
     String? watermarkImgPath;
     if (watermarkText != null && watermarkText.trim().isNotEmpty) {

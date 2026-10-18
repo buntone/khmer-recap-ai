@@ -25,6 +25,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late String _watermarkFont;
   late String _watermarkColor;
   late double _watermarkOpacity;
+  late double _defaultDucking;
+  late bool _removeChineseVocals;
   bool _isTestingKeys = false;
   Map<String, bool?> _keyValidationStatus = {};
 
@@ -47,6 +49,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _watermarkFont = widget.settingsService.watermarkFont;
     _watermarkColor = widget.settingsService.watermarkColor;
     _watermarkOpacity = widget.settingsService.watermarkOpacity;
+    _defaultDucking = widget.settingsService.defaultDuckingVolume;
+    _removeChineseVocals = widget.settingsService.removeChineseVocals;
   }
 
   @override
@@ -142,6 +146,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     widget.settingsService.watermarkFont = _watermarkFont;
     widget.settingsService.watermarkColor = _watermarkColor;
     widget.settingsService.watermarkOpacity = _watermarkOpacity;
+    widget.settingsService.defaultDuckingVolume = _defaultDucking;
+    widget.settingsService.removeChineseVocals = _removeChineseVocals;
     widget.settingsService.subtitleEnabled = false;
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -607,6 +613,120 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           style: TextStyle(
                               color: Colors.amberAccent, fontSize: 10)),
                       Text('+2.0s (ពន្យារ)',
+                          style:
+                              TextStyle(color: Colors.white38, fontSize: 10)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 18),
+
+            // Section: Background Audio & Chinese Vocal Isolation Card
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                    color: Colors.tealAccent.withValues(alpha: 0.35),
+                    width: 1.2),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Expanded(
+                        child: Row(
+                          children: [
+                            Icon(Icons.music_note_rounded,
+                                color: Colors.tealAccent, size: 22),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'សំឡេង Background & ដកសំឡេងចិន',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _removeChineseVocals,
+                        activeColor: Colors.tealAccent,
+                        onChanged: (val) =>
+                            setState(() => _removeChineseVocals = val),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'កាត់សំឡេងនិយាយជាភាសាចិនចេញពីវីដេអូដើម ដោយរក្សាទុកតែភ្លេងកំដរ (BGM) និងសំឡេង Effects បរិយាកាស (SFX) ដើម្បីធ្វើជា Background។',
+                    style: TextStyle(
+                        color: Colors.white60, fontSize: 11, height: 1.4),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'កម្រិតលឺ Background ដើម (BGM Volume):',
+                        style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.tealAccent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${(_defaultDucking * 100).toInt()}%',
+                          style: const TextStyle(
+                              color: Colors.tealAccent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor: Colors.tealAccent,
+                      inactiveTrackColor: Colors.white12,
+                      thumbColor: Colors.tealAccent,
+                      overlayColor: Colors.tealAccent.withValues(alpha: 0.2),
+                    ),
+                    child: Slider(
+                      value: _defaultDucking,
+                      min: 0.0,
+                      max: 0.8,
+                      divisions: 16,
+                      onChanged: (val) =>
+                          setState(() => _defaultDucking = val),
+                    ),
+                  ),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('0% (បិទ)',
+                          style:
+                              TextStyle(color: Colors.white38, fontSize: 10)),
+                      Text('20% (ស្ដង់ដារ/ណែនាំ)',
+                          style: TextStyle(
+                              color: Colors.tealAccent, fontSize: 10)),
+                      Text('80% (ខ្លាំង)',
                           style:
                               TextStyle(color: Colors.white38, fontSize: 10)),
                     ],

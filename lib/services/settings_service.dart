@@ -8,6 +8,7 @@ class SettingsService {
   static const String keyVoicePrasithId = 'voice_prasith_id';
   static const String keyVoiceSreymomId = 'voice_sreymom_id';
   static const String keyDefaultDucking = 'default_ducking_volume';
+  static const String keyRemoveChineseVocals = 'remove_chinese_vocals';
   static const String keyAudioSyncDelay = 'audio_sync_delay_ms';
   static const String keyWatermarkEnabled = 'watermark_enabled';
   static const String keyWatermarkText = 'watermark_text';
@@ -121,9 +122,16 @@ class SettingsService {
       _prefs.getString(keyVoiceSreymomId) ?? defaultSreymomId;
   set voiceSreymomId(String val) => _prefs.setString(keyVoiceSreymomId, val);
 
-  double get defaultDuckingVolume => _prefs.getDouble(keyDefaultDucking) ?? 0.0;
+  double get defaultDuckingVolume =>
+      _prefs.getDouble(keyDefaultDucking) ?? 0.20;
   set defaultDuckingVolume(double val) =>
       _prefs.setDouble(keyDefaultDucking, val);
+
+  /// Automatically filters out center Chinese speech, leaving BGM/SFX background track (default true)
+  bool get removeChineseVocals =>
+      _prefs.getBool(keyRemoveChineseVocals) ?? true;
+  set removeChineseVocals(bool val) =>
+      _prefs.setBool(keyRemoveChineseVocals, val);
 
   /// Delay in seconds to shift audio forward/backward to align with mouth movements (default 0.0s)
   double get audioSyncDelay => _prefs.getDouble(keyAudioSyncDelay) ?? 0.0;

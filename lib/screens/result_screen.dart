@@ -25,8 +25,11 @@ class ResultScreen extends StatefulWidget {
     required this.generatedScript,
     required this.selectedVoice,
     required this.duckingVolume,
+    this.removeChineseVocals = true,
     required this.settingsService,
   });
+
+  final bool removeChineseVocals;
 
   @override
   State<ResultScreen> createState() => _ResultScreenState();
@@ -42,11 +45,15 @@ class _ResultScreenState extends State<ResultScreen> {
   bool _isSavedToGallery = true;
   final FFmpegService _ffmpegService = FFmpegService();
   late KhmerVoice _currentVoice;
+  late double _currentDuckingVolume;
+  late bool _currentRemoveChineseVocals;
 
   @override
   void initState() {
     super.initState();
     _currentVoice = widget.selectedVoice;
+    _currentDuckingVolume = widget.duckingVolume;
+    _currentRemoveChineseVocals = widget.removeChineseVocals;
     _currentDubbedVideoPath = widget.dubbedVideoPath;
     _currentKhmerAudioPath = widget.khmerAudioPath;
     _scriptController = TextEditingController(text: widget.generatedScript);
@@ -318,7 +325,8 @@ class _ResultScreenState extends State<ResultScreen> {
       final newVideoPath = await _ffmpegService.mergeKhmerVoiceWithVideo(
         originalVideoPath: widget.originalVideoPath,
         khmerAudioPath: newAudioPath,
-        duckingVolume: widget.duckingVolume,
+        duckingVolume: _currentDuckingVolume,
+        removeChineseVocals: _currentRemoveChineseVocals,
         watermarkText: widget.settingsService.watermarkEnabled
             ? widget.settingsService.watermarkText
             : null,
