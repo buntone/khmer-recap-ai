@@ -95,30 +95,42 @@ class KhmerTtsService {
     final List<List<int>?> rawBytesList = List.filled(totalSegments, null);
     int completedTts = 0;
 
-    // 1. Sequential TTS Synthesis with gentle 80ms pacing to eliminate server WebSocket throttling
-    for (int idx = 0; idx < totalSegments; idx++) {
-      final seg = segments[idx];
-      try {
-        final bytes = await _callTtsEndpoint(
-          text: seg.text,
-          voiceId: seg.voiceId,
-          speed: speed,
-          pitch: pitch,
+    // 1. Parallel TTS Synthesis with concurrency pool of 3 for blazing-fast generation
+    Future<void> synthesizeWorker(List<int> indices) async {
+      for (final idx in indices) {
+        final seg = segments[idx];
+        try {
+          final bytes = await _callTtsEndpoint(
+            text: seg.text,
+            voiceId: seg.voiceId,
+            speed: speed,
+            pitch: pitch,
+          );
+          rawBytesList[idx] = bytes;
+        } catch (e) {
+          debugPrint('TTS segment $idx failed: $e');
+        }
+        completedTts++;
+        onProgress?.call(
+          (completedTts / totalSegments) * 0.7,
+          completedTts,
+          totalSegments,
         );
-        rawBytesList[idx] = bytes;
-      } catch (e) {
-        debugPrint('TTS segment $idx failed: $e');
-      }
-      completedTts++;
-      onProgress?.call(
-        (completedTts / totalSegments) * 0.7,
-        completedTts,
-        totalSegments,
-      );
-      if (idx + 1 < totalSegments) {
-        await Future.delayed(const Duration(milliseconds: 80));
       }
     }
+
+    const concurrency = 3;
+    final workerBuckets = List.generate(concurrency, (_) => <int>[]);
+    for (int i = 0; i < totalSegments; i++) {
+      workerBuckets[i % concurrency].add(i);
+    }
+    await Future.wait(
+      List.generate(workerBuckets.length, (bIdx) async {
+        if (workerBuckets[bIdx].isEmpty) return;
+        if (bIdx > 0) await Future.delayed(Duration(milliseconds: 30 * bIdx));
+        await synthesizeWorker(workerBuckets[bIdx]);
+      }),
+    );
 
     // Map chunk files by their EXACT segment index to prevent ANY index desynchronization!
     final Map<int, File> chunkFilesMap = {};
@@ -730,6 +742,7 @@ class KhmerTtsService {
   }
 
   /// Sends request to Microsoft Edge Neural TTS or Custom Khmer TTS engine with auto-retry
+  /// Sends request to Microsoft Edge Neural TTS or Custom Khmer TTS engine with auto-retry
   Future<List<int>> _callTtsEndpoint({
     required String text,
     required String voiceId,
@@ -741,7 +754,7 @@ class KhmerTtsService {
       return [];
     }
 
-    // 1. Primary: Microsoft Neural Edge-TTS v2 (Piseth & Sreymom) with 3 retries
+    // 1. Primary: Microsoft Neural Edge-TTS v2 (Piseth & Sreymom) - Fast & ultra natural
     final selectedEdgeVoice = voiceId.toLowerCase().contains('sreymom')
         ? 'km-KH-SreymomNeural'
         : 'km-KH-PisethNeural';
@@ -749,23 +762,18 @@ class KhmerTtsService {
     final ratePercent = ((speed - 1.0) * 100).round();
     final rateStr = ratePercent >= 0 ? '+$ratePercent%' : '$ratePercent%';
 
-    for (int attempt = 1; attempt <= 3; attempt++) {
-      try {
-        final audioBytes = await EdgeTtsV2.synthesize(
-          text: cleanText,
-          voice: selectedEdgeVoice,
-          rate: rateStr,
-        );
+    try {
+      final audioBytes = await EdgeTtsV2.synthesize(
+        text: cleanText,
+        voice: selectedEdgeVoice,
+        rate: rateStr,
+      );
 
-        if (audioBytes.isNotEmpty && audioBytes.length > 300) {
-          return audioBytes;
-        }
-      } catch (e) {
-        debugPrint('Edge-TTS attempt $attempt failed for "$cleanText": $e');
-        if (attempt < 3) {
-          await Future.delayed(Duration(milliseconds: 200 * attempt));
-        }
+      if (audioBytes.isNotEmpty && audioBytes.length > 200) {
+        return audioBytes;
       }
+    } catch (e) {
+      debugPrint('Edge-TTS note for "$cleanText": $e');
     }
 
     // 2. Custom User-Configured REST Endpoint (if configured)
@@ -796,7 +804,7 @@ class KhmerTtsService {
               headers: headers,
               body: body,
             )
-            .timeout(const Duration(seconds: 10));
+            .timeout(const Duration(seconds: 4));
 
         if (response.statusCode >= 200 && response.statusCode < 300) {
           if (response.headers['content-type']?.contains('audio') == true ||
@@ -812,7 +820,7 @@ class KhmerTtsService {
             } else if (jsonData is Map && jsonData.containsKey('audio_url')) {
               final downloadRes = await http
                   .get(Uri.parse(jsonData['audio_url']))
-                  .timeout(const Duration(seconds: 10));
+                  .timeout(const Duration(seconds: 4));
               return downloadRes.bodyBytes;
             }
           } catch (_) {}
@@ -822,78 +830,42 @@ class KhmerTtsService {
       } catch (_) {}
     }
 
-    // 3. Fallback: Google Khmer TTS with clause splitting and multi-client fallback
+    // 3. Fallback: Ultra-fast Google Khmer TTS (200-300ms)
     try {
-      final subClauses = <String>[];
-      if (cleanText.length <= 70) {
-        subClauses.add(cleanText);
-      } else {
-        var rem = cleanText;
-        while (rem.length > 70) {
-          int cut = rem.lastIndexOf(' ', 70);
-          if (cut <= 15) cut = 70;
-          subClauses.add(rem.substring(0, cut).trim());
-          rem = rem.substring(cut).trim();
-        }
-        if (rem.isNotEmpty) subClauses.add(rem);
+      final encodedText = Uri.encodeComponent(cleanText);
+      final gTtsUri = Uri.parse(
+        'https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=km&q=$encodedText',
+      );
+      final gResponse = await http.get(
+        gTtsUri,
+        headers: {
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      ).timeout(const Duration(milliseconds: 2500));
+
+      if (gResponse.statusCode == 200 && gResponse.bodyBytes.length > 80) {
+        return gResponse.bodyBytes;
       }
+    } catch (_) {}
 
-      final combined = BytesBuilder(copy: false);
-      const googleClients = ['gtx', 'tw-ob', 'dict-chrome-ex'];
-
-      for (final clause in subClauses) {
-        if (clause.isEmpty) continue;
-        final encodedText = Uri.encodeComponent(clause);
-        bool clauseSucceeded = false;
-
-        for (final clientType in googleClients) {
-          try {
-            final gTtsUri = Uri.parse(
-              'https://translate.googleapis.com/translate_tts?ie=UTF-8&tl=km&client=$clientType&q=$encodedText',
-            );
-            final gResponse = await http.get(
-              gTtsUri,
-              headers: {
-                'User-Agent':
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-              },
-            ).timeout(const Duration(seconds: 7));
-
-            if (gResponse.statusCode == 200 && gResponse.bodyBytes.length > 80) {
-              combined.add(gResponse.bodyBytes);
-              clauseSucceeded = true;
-              break;
-            }
-          } catch (_) {}
-        }
-
-        if (!clauseSucceeded) {
-          // Retry once with fallback domain translate.google.com
-          try {
-            final fallbackUri = Uri.parse(
-              'https://translate.google.com/translate_tts?ie=UTF-8&tl=km&client=tw-ob&q=$encodedText',
-            );
-            final fallbackRes = await http.get(
-              fallbackUri,
-              headers: {
-                'User-Agent':
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-              },
-            ).timeout(const Duration(seconds: 7));
-            if (fallbackRes.statusCode == 200 && fallbackRes.bodyBytes.length > 80) {
-              combined.add(fallbackRes.bodyBytes);
-            }
-          } catch (_) {}
-        }
+    // Fallback tw-ob client
+    try {
+      final encodedText = Uri.encodeComponent(cleanText);
+      final fallbackUri = Uri.parse(
+        'https://translate.google.com/translate_tts?ie=UTF-8&tl=km&client=tw-ob&q=$encodedText',
+      );
+      final fallbackRes = await http.get(
+        fallbackUri,
+        headers: {
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      ).timeout(const Duration(milliseconds: 2500));
+      if (fallbackRes.statusCode == 200 && fallbackRes.bodyBytes.length > 80) {
+        return fallbackRes.bodyBytes;
       }
-
-      final resultBytes = combined.toBytes();
-      if (resultBytes.isNotEmpty && resultBytes.length > 200) {
-        return resultBytes;
-      }
-    } catch (e) {
-      debugPrint('Google Khmer TTS fallback error: $e');
-    }
+    } catch (_) {}
 
     throw Exception(
         'មិនអាចទាញយកសំឡេងអានជាភាសាខ្មែរបានឡើយ (Failed to synthesize Khmer speech).');

@@ -663,37 +663,34 @@ class EdgeTtsV2 {
     final builder = BytesBuilder(copy: false);
 
     for (final chunk in chunks) {
-      Uint8List? chunkBytes;
-      Object? lastError;
-
-      for (int attempt = 1; attempt <= 3; attempt++) {
-        try {
-          chunkBytes = await _synthesizeInternal(
-            text: chunk,
-            voice: voice,
-            rate: rate,
-            pitch: pitch,
-            volume: volume,
-          );
-          if (chunkBytes.length > 200) {
-            break;
-          }
-        } catch (e) {
-          lastError = e;
-          if (attempt == 1) {
-            await calibrateClock(force: true);
-          }
-          if (attempt < 3) {
-            await Future.delayed(Duration(milliseconds: 200 * attempt));
-          }
+      try {
+        final bytes = await _synthesizeInternal(
+          text: chunk,
+          voice: voice,
+          rate: rate,
+          pitch: pitch,
+          volume: volume,
+        );
+        if (bytes.isNotEmpty) {
+          builder.add(bytes);
+          continue;
         }
-      }
+      } catch (_) {}
 
-      if (chunkBytes != null && chunkBytes.length > 200) {
-        builder.add(chunkBytes);
-      } else if (lastError != null) {
-        throw lastError;
-      }
+      // Fast single retry with clock calibration
+      try {
+        await calibrateClock(force: true);
+        final bytes = await _synthesizeInternal(
+          text: chunk,
+          voice: voice,
+          rate: rate,
+          pitch: pitch,
+          volume: volume,
+        );
+        if (bytes.isNotEmpty) {
+          builder.add(bytes);
+        }
+      } catch (_) {}
     }
     return builder.toBytes();
   }
@@ -733,7 +730,7 @@ class EdgeTtsV2 {
       },
       compression: CompressionOptions.compressionOff,
       customClient: httpClient,
-    ).timeout(const Duration(seconds: 8));
+    ).timeout(const Duration(seconds: 4));
 
     final timestamp = generateTimestamp();
     final configMsg = 'X-Timestamp:$timestamp\r\n'
@@ -748,10 +745,10 @@ class EdgeTtsV2 {
 
     final longVoice = _voiceShortToLong(voice);
     final escaped = _xmlEscape(text);
-    final langCode = voice.toLowerCase().contains('km-kh') ? 'km-KH' : 'en-US';
+    // Microsoft Read Aloud protocol requires xml:lang='en-US' at root <speak> tag
     final ssml =
         "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' "
-        "xml:lang='$langCode'>"
+        "xml:lang='en-US'>"
         "<voice name='$longVoice'>"
         "<prosody pitch='$pitch' rate='$rate' volume='$volume'>"
         '$escaped'
@@ -794,7 +791,7 @@ class EdgeTtsV2 {
       onError: (err) {
         if (!completer.isCompleted) {
           final partial = builder.toBytes();
-          if (partial.length > 300) {
+          if (partial.length > 100) {
             completer.complete(partial);
           } else {
             completer.completeError(err);
@@ -809,11 +806,11 @@ class EdgeTtsV2 {
 
     try {
       final result =
-          await completer.future.timeout(const Duration(seconds: 12));
+          await completer.future.timeout(const Duration(seconds: 5));
       return result;
     } on TimeoutException {
       final partial = builder.toBytes();
-      if (partial.length > 300) {
+      if (partial.length > 100) {
         return partial;
       }
       rethrow;
