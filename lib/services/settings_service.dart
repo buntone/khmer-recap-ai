@@ -11,6 +11,9 @@ class SettingsService {
   static const String keyAudioSyncDelay = 'audio_sync_delay_ms';
   static const String keyWatermarkEnabled = 'watermark_enabled';
   static const String keyWatermarkText = 'watermark_text';
+  static const String keyWatermarkFont = 'watermark_font';
+  static const String keyWatermarkColor = 'watermark_color';
+  static const String keyWatermarkOpacity = 'watermark_opacity';
   static const String keySubtitleEnabled = 'subtitle_enabled';
   static const String keySubtitleColor = 'subtitle_color';
   static const String keySubtitleFontSize = 'subtitle_font_size';
@@ -20,6 +23,9 @@ class SettingsService {
   static const String defaultPrasithId = 'km-KH-PisethNeural';
   static const String defaultSreymomId = 'km-KH-SreymomNeural';
   static const String defaultWatermarkText = 'ដោយ.B.T.movie';
+  static const String defaultWatermarkFont = 'Moul';
+  static const String defaultWatermarkColor = 'gold';
+  static const double defaultWatermarkOpacity = 0.40;
 
   final SharedPreferences _prefs;
 
@@ -132,9 +138,25 @@ class SettingsService {
   set watermarkText(String val) =>
       _prefs.setString(keyWatermarkText, val.trim());
 
-  /// On-video Khmer subtitle display toggle (default: true)
-  bool get subtitleEnabled => _prefs.getBool(keySubtitleEnabled) ?? true;
-  set subtitleEnabled(bool val) => _prefs.setBool(keySubtitleEnabled, val);
+  /// Khmer font family for video watermark logo (e.g. 'Moul', 'Preahvihear', etc.)
+  String get watermarkFont =>
+      _prefs.getString(keyWatermarkFont) ?? defaultWatermarkFont;
+  set watermarkFont(String val) => _prefs.setString(keyWatermarkFont, val);
+
+  /// Color for watermark logo (e.g. 'gold', 'white', 'cyan', etc.)
+  String get watermarkColor =>
+      _prefs.getString(keyWatermarkColor) ?? defaultWatermarkColor;
+  set watermarkColor(String val) => _prefs.setString(keyWatermarkColor, val);
+
+  /// Watermark opacity / shadow level (default 40% = 0.40)
+  double get watermarkOpacity =>
+      _prefs.getDouble(keyWatermarkOpacity) ?? defaultWatermarkOpacity;
+  set watermarkOpacity(double val) =>
+      _prefs.setDouble(keyWatermarkOpacity, val);
+
+  /// On-video Khmer subtitle display toggle (disabled per user request)
+  bool get subtitleEnabled => false;
+  set subtitleEnabled(bool val) => _prefs.setBool(keySubtitleEnabled, false);
 
   /// Subtitle color: 'yellow' (default), 'white', 'cyan', 'green'
   String get subtitleColor =>

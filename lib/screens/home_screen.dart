@@ -107,6 +107,11 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    // Pause preview video player during processing to release ExoPlayer decoder buffers and RAM
+    try {
+      await _previewController?.pause();
+    } catch (_) {}
+
     setState(() {
       _isProcessing = true;
       _currentStage = ProcessingStage.analyzingVideo;
@@ -180,6 +185,9 @@ class _HomeScreenState extends State<HomeScreen> {
         watermarkText: widget.settingsService.watermarkEnabled
             ? widget.settingsService.watermarkText
             : null,
+        watermarkFont: widget.settingsService.watermarkFont,
+        watermarkColor: widget.settingsService.watermarkColor,
+        watermarkOpacity: widget.settingsService.watermarkOpacity,
         scriptText: khmerScript,
         subtitleEnabled: widget.settingsService.subtitleEnabled,
         subtitleColor: widget.settingsService.subtitleColor,

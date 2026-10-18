@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -251,9 +250,12 @@ class KhmerTtsService {
       final chunkRawBytes = await chunkFile.readAsBytes();
       if (chunkRawBytes.length <= 44) continue;
 
-      // Extract raw 16-bit PCM samples without 44-byte WAV header
-      final chunkPcm = chunkRawBytes.sublist(44);
+      // Extract raw 16-bit PCM samples cleanly without WAV headers or metadata chunks
+      final chunkPcm = _extractPcmData(chunkRawBytes);
+      if (chunkPcm == null || chunkPcm.isEmpty) continue;
+
       final chunkSampleCount = chunkPcm.length ~/ bytesPerSample;
+      if (chunkSampleCount <= 0) continue;
 
       final targetStart = (seg.startSeconds + syncDelaySeconds)
           .clamp(0.0, totalDurationSeconds);
@@ -274,31 +276,42 @@ class KhmerTtsService {
       final copySamples = chunkSampleCount <= maxAvailableSamples
           ? chunkSampleCount
           : maxAvailableSamples;
+      if (copySamples <= 0) continue;
 
-      final masterStartByte = startSample * bytesPerSample;
       final bytesToCopy = copySamples * bytesPerSample;
 
-      // If truncated to avoid overlapping next speaker, apply smooth 25ms micro-fade
-      if (copySamples < chunkSampleCount && copySamples > 600) {
-        const fadeSamples = 600; // 25ms at 24kHz
-        final fadeStartSample = copySamples - fadeSamples;
-        final bd =
-            ByteData.view(chunkPcm.buffer, chunkPcm.offsetInBytes, bytesToCopy);
-        for (int s = 0; s < fadeSamples; s++) {
-          final sampleIdx = fadeStartSample + s;
-          final originalVal =
-              bd.getInt16(sampleIdx * bytesPerSample, Endian.little);
-          final factor = (fadeSamples - s) / fadeSamples;
-          final fadedVal = (originalVal * factor).round().clamp(-32768, 32767);
-          bd.setInt16(sampleIdx * bytesPerSample, fadedVal, Endian.little);
-        }
+      // Create a mutable copy of the PCM segment to apply smooth anti-click micro-fades
+      final pcmSlice = Uint8List.fromList(chunkPcm.sublist(0, bytesToCopy));
+      final bdSlice = ByteData.view(pcmSlice.buffer);
+
+      // 1. Smooth 5ms micro-fade IN (120 samples at 24kHz) to prevent initial step pop/click
+      final inFade = copySamples < 120 ? copySamples : 120;
+      for (int s = 0; s < inFade; s++) {
+        final sampleOffset = s * bytesPerSample;
+        final val = bdSlice.getInt16(sampleOffset, Endian.little);
+        final factor = s / inFade;
+        bdSlice.setInt16(sampleOffset, (val * factor).round().clamp(-32768, 32767), Endian.little);
       }
 
+      // 2. Smooth 10ms micro-fade OUT (240 samples at 24kHz) at end of speech segment
+      // (or 25ms / 600 samples if truncated before next speaker)
+      final outFade = copySamples < chunkSampleCount
+          ? (copySamples < 600 ? copySamples : 600)
+          : (copySamples < 240 ? copySamples : 240);
+      final outStart = copySamples - outFade;
+      for (int s = 0; s < outFade; s++) {
+        final sampleOffset = (outStart + s) * bytesPerSample;
+        final val = bdSlice.getInt16(sampleOffset, Endian.little);
+        final factor = (outFade - s) / outFade;
+        bdSlice.setInt16(sampleOffset, (val * factor).round().clamp(-32768, 32767), Endian.little);
+      }
+
+      final masterStartByte = startSample * bytesPerSample;
       if (masterStartByte + bytesToCopy <= totalPcmBytes) {
         masterPcm.setRange(
           masterStartByte,
           masterStartByte + bytesToCopy,
-          chunkPcm.sublist(0, bytesToCopy),
+          pcmSlice,
         );
       }
     }
@@ -372,44 +385,66 @@ class KhmerTtsService {
     return (fileSizeBytes - 44) / 48000.0;
   }
 
-  /// Generates a standard PCM WAV silence file instantly in pure Dart without FFmpeg
-  static Future<File> _generateSilenceFile(
-      double durationSeconds, String outputPath) async {
-    const sampleRate = 24000;
-    const channels = 1;
-    const bitsPerSample = 16;
-    const bytesPerSample = bitsPerSample ~/ 8;
-    final numSamples = (durationSeconds * sampleRate).round();
-    final dataSize = numSamples * channels * bytesPerSample;
-    final totalSize = 36 + dataSize;
+  /// Extracts the exact raw 16-bit PCM bytes by properly traversing the RIFF WAV chunks
+  /// to locate the 'data' subchunk, preventing header/metadata interpretation as audio clicks!
+  static Uint8List? _extractPcmData(Uint8List wavBytes) {
+    if (wavBytes.length < 12) return null;
+    // Check 'RIFF' and 'WAVE'
+    if (wavBytes[0] != 0x52 ||
+        wavBytes[1] != 0x49 ||
+        wavBytes[2] != 0x46 ||
+        wavBytes[3] != 0x46 ||
+        wavBytes[8] != 0x57 ||
+        wavBytes[9] != 0x41 ||
+        wavBytes[10] != 0x56 ||
+        wavBytes[11] != 0x45) {
+      return wavBytes.length > 44 ? wavBytes.sublist(44) : null;
+    }
 
-    final bytes = Uint8List(44 + dataSize);
-    final bd = ByteData.view(bytes.buffer);
+    final bd = ByteData.view(
+        wavBytes.buffer, wavBytes.offsetInBytes, wavBytes.lengthInBytes);
+    int offset = 12;
 
-    // RIFF chunk descriptor
-    bytes.setRange(0, 4, 'RIFF'.codeUnits);
-    bd.setUint32(4, totalSize, Endian.little);
-    bytes.setRange(8, 12, 'WAVE'.codeUnits);
+    while (offset + 8 <= wavBytes.length) {
+      final chunkId =
+          String.fromCharCodes(wavBytes.sublist(offset, offset + 4));
+      final chunkSize = bd.getUint32(offset + 4, Endian.little);
+      final dataStart = offset + 8;
 
-    // fmt subchunk
-    bytes.setRange(12, 16, 'fmt '.codeUnits);
-    bd.setUint32(16, 16, Endian.little);
-    bd.setUint16(20, 1, Endian.little); // PCM format
-    bd.setUint16(22, channels, Endian.little);
-    bd.setUint32(24, sampleRate, Endian.little);
-    bd.setUint32(
-        28, sampleRate * channels * bytesPerSample, Endian.little); // 48000
-    bd.setUint16(32, channels * bytesPerSample, Endian.little); // 2
-    bd.setUint16(34, bitsPerSample, Endian.little); // 16
+      if (chunkId == 'data') {
+        final dataEnd = (dataStart + chunkSize).clamp(0, wavBytes.length);
+        if (dataEnd > dataStart) {
+          return wavBytes.sublist(dataStart, dataEnd);
+        }
+      }
 
-    // data subchunk
-    bytes.setRange(36, 40, 'data'.codeUnits);
-    bd.setUint32(40, dataSize, Endian.little);
+      // Next chunk: chunkSize plus 1 padding byte if chunkSize is odd
+      offset = dataStart + chunkSize + (chunkSize % 2);
+    }
 
-    final file = File(outputPath);
-    await file.writeAsBytes(bytes, flush: true);
-    return file;
+    // Fallback: search for 'data' signature directly in the file
+    for (int i = 12; i <= wavBytes.length - 8; i++) {
+      if (wavBytes[i] == 0x64 && // 'd'
+          wavBytes[i + 1] == 0x61 && // 'a'
+          wavBytes[i + 2] == 0x74 && // 't'
+          wavBytes[i + 3] == 0x61) {
+        // 'a'
+        final chunkSize = bd.getUint32(i + 4, Endian.little);
+        final dataStart = i + 8;
+        final dataEnd = (dataStart + chunkSize).clamp(0, wavBytes.length);
+        if (dataEnd > dataStart) {
+          return wavBytes.sublist(dataStart, dataEnd);
+        }
+      }
+    }
+
+    return wavBytes.length > 44 ? wavBytes.sublist(44) : null;
   }
+
+  @visibleForTesting
+  static Uint8List? extractPcmDataForTesting(Uint8List wavBytes) =>
+      _extractPcmData(wavBytes);
+
 
   /// Parses timestamps like "00:00:02,800", "01:28", "88.5" into total seconds
   static double? _parseTimeToSeconds(String? timeStr) {
@@ -550,44 +585,41 @@ class KhmerTtsService {
       bool isFemale = false;
       bool hasExplicitSpeaker = false;
 
-      // 1. Match any bracketed tag at the start e.g. [ស្រី], [ប្រុស], [អ្នករៀបរាប់], [សម្រាយ], [អ្នកសម្រាយ], [ក្នុងចិត្ត]
-      final bracketMatch =
-          RegExp(r'^\s*\[([^\]]+)\]\s*[:៖\-–\s]*').firstMatch(lineText);
+      final femaleKeywords = RegExp(
+          r'(?:ស្រី|តួស្រី|នារី|ស្ត្រី|ម្ដាយ|ម្តាយ|ម៉ាក់|ម៉ែ|យាយ|លោកយាយ|មីង|អ្នកមីង|ប្រពន្ធ|ភរិយា|កូនស្រី|ប្អូនស្រី|បងស្រី|ចៅស្រី|កញ្ញា|អ្នកនាង|ជំទាវ|អូន|female|woman|girl|\bF\b|女|女主)',
+          caseSensitive: false);
+      final maleKeywords = RegExp(
+          r'(?:ប្រុស|តួប្រុស|បុរស|ឪពុក|ពុក|ប៉ា|លោកប៉ា|តា|លោកតា|ពូ|លោកពូ|ប្ដី|ស្វាមី|កូនប្រុស|ប្អូនប្រុស|បងប្រុស|ចៅប្រុស|អ្នកកំលោះ|លោក|អ្នករៀបរាប់|អ្នកសម្រាយ|male|man|boy|narrator|\bM\b|男|男主)',
+          caseSensitive: false);
+
+      // 1. Match any bracketed tag at the start e.g. [ស្រី], 【ស្រី】, (ស្រី), **[ស្រី]**, <ស្រី>
+      final bracketMatch = RegExp(
+              r'^\s*[\*_]*[\[\(【（<]([^\]\)】）>]+)[\]\)】）>][\*_]*\s*[:៖\-–\s]*')
+          .firstMatch(lineText);
       if (bracketMatch != null) {
         final tagContent = bracketMatch.group(1)!.trim();
-        if (RegExp(
-                r'(?:ស្រី|នារី|ស្ត្រី|ម្ដាយ|ម៉ាក់|យាយ|female|woman|girl|\bF\b)',
-                caseSensitive: false)
-            .hasMatch(tagContent)) {
+        if (femaleKeywords.hasMatch(tagContent)) {
           isFemale = true;
           hasExplicitSpeaker = true;
-        } else if (RegExp(
-                r'(?:ប្រុស|បុរស|ឪពុក|ប៉ា|តា|អ្នករៀបរាប់|អ្នកសម្រាយ|សម្រាយ|male|man|boy|narrator|\bM\b)',
-                caseSensitive: false)
-            .hasMatch(tagContent)) {
+        } else if (maleKeywords.hasMatch(tagContent)) {
           isFemale = false;
           hasExplicitSpeaker = true;
         }
-        lineText =
-            lineText.replaceFirst(RegExp(r'^\s*\[([^\]]+)\]\s*[:៖\-–\s]*'), '');
+        lineText = lineText.replaceFirst(
+            RegExp(r'^\s*[\*_]*[\[\(【（<][^\]\)】）>]+[\]\)】）>][\*_]*\s*[:៖\-–\s]*'),
+            '');
       } else {
-        // 2. Match unbracketed tag at start e.g. ស្រី: or ប្រុស: or សម្រាយ:
-        final plainMatch =
-            RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+').firstMatch(lineText);
+        // 2. Match unbracketed tag at start e.g. ស្រី: or ប្រុស: or នារី៖
+        final plainMatch = RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+')
+            .firstMatch(lineText);
         if (plainMatch != null) {
           final tagContent = plainMatch.group(1)!.trim();
-          if (RegExp(
-                  r'(?:ស្រី|នារី|ស្ត្រី|ម្ដាយ|ម៉ាក់|យាយ|female|woman|girl|^F$)',
-                  caseSensitive: false)
-              .hasMatch(tagContent)) {
+          if (femaleKeywords.hasMatch(tagContent)) {
             isFemale = true;
             hasExplicitSpeaker = true;
             lineText = lineText.replaceFirst(
                 RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+'), '');
-          } else if (RegExp(
-                  r'(?:ប្រុស|បុរស|ឪពុក|ប៉ា|តា|អ្នករៀបរាប់|អ្នកសម្រាយ|សម្រាយ|male|man|boy|narrator|^M$)',
-                  caseSensitive: false)
-              .hasMatch(tagContent)) {
+          } else if (maleKeywords.hasMatch(tagContent)) {
             isFemale = false;
             hasExplicitSpeaker = true;
             lineText = lineText.replaceFirst(
@@ -610,12 +642,30 @@ class KhmerTtsService {
       // If untagged inner monologue, check for gender context cues
       if (!hasExplicitSpeaker &&
           RegExp(r'(?:ក្នុងចិត្ត|គិតក្នុងចិត្ត|内心|心想|独白)').hasMatch(trimmed)) {
-        if (RegExp(r'(?:នាង|ម៉ាក់|ម៉ែ|កូនស្រី|ប្អូនស្រី|ស្ត្រី|យាយ)')
-            .hasMatch(trimmed)) {
+        if (femaleKeywords.hasMatch(trimmed)) {
           isFemale = true;
           hasExplicitSpeaker = true;
-        } else if (RegExp(r'(?:បង|ពុក|ប៉ា|កូនប្រុស|ប្អូនប្រុស|បុរស|តា)')
-            .hasMatch(trimmed)) {
+        } else if (maleKeywords.hasMatch(trimmed)) {
+          isFemale = false;
+          hasExplicitSpeaker = true;
+        }
+      }
+
+      // 3. Dialogue content heuristics: If no explicit speaker tag was found,
+      // intelligently infer speaker gender from spoken words and kinship references!
+      if (!hasExplicitSpeaker) {
+        final isFemaleDialogue = RegExp(
+          r'(?:(?:^|\s)(?:ម៉ាក់|ម៉ែ|ម្ដាយ|ម្តាយ|អូន|កូនស្រី|ប្អូនស្រី|នាងខ្ញុំ|អ្នកនាង|កញ្ញា)(?:[\s!,?៖:]|$)|(?:បងសម្លាញ់|លោកប្ដី|ប្ដីខ្ញុំ|បងកុំ|បងឯង))',
+        ).hasMatch(lineText);
+
+        final isMaleDialogue = RegExp(
+          r'(?:(?:^|\s)(?:ប៉ា|ពុក|ឪពុក|បង|កូនប្រុស|ប្អូនប្រុស)(?:[\s!,?៖:]|$)|(?:អូនសម្លាញ់|ប្រពន្ធខ្ញុំ|អូនកុំ|អូនឯង))',
+        ).hasMatch(lineText);
+
+        if (isFemaleDialogue && !isMaleDialogue) {
+          isFemale = true;
+          hasExplicitSpeaker = true;
+        } else if (isMaleDialogue && !isFemaleDialogue) {
           isFemale = false;
           hasExplicitSpeaker = true;
         }

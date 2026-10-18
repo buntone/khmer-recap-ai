@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import '../models/watermark_style.dart';
 import '../services/ffmpeg_service.dart';
 import '../services/khmer_tts_service.dart';
 import '../services/settings_service.dart';
@@ -62,37 +63,29 @@ class _ResultScreenState extends State<ResultScreen> {
     }
     if (lineIndex < validLinesIndices.length) {
       final actualIndex = validLinesIndices[lineIndex];
-      var line = rawLines[actualIndex];
-      if (currentlyFemale) {
-        line = line
-            .replaceAll('[ស្រី]:', '[ប្រុស]:')
-            .replaceAll('[ស្រី]', '[ប្រុស]');
-        if (!line.contains('[ប្រុស]')) {
-          final timeMatch =
-              RegExp(r'(\[\d{1,2}:\d{2}(?::\d{2})?\])').firstMatch(line);
-          if (timeMatch != null) {
-            line = line.replaceFirst(
-                timeMatch.group(1)!, '${timeMatch.group(1)!} [ប្រុស]:');
-          } else {
-            line = '[ប្រុស]: $line';
-          }
-        }
-      } else {
-        line = line
-            .replaceAll('[ប្រុស]:', '[ស្រី]:')
-            .replaceAll('[ប្រុស]', '[ស្រី]');
-        if (!line.contains('[ស្រី]')) {
-          final timeMatch =
-              RegExp(r'(\[\d{1,2}:\d{2}(?::\d{2})?\])').firstMatch(line);
-          if (timeMatch != null) {
-            line = line.replaceFirst(
-                timeMatch.group(1)!, '${timeMatch.group(1)!} [ស្រី]:');
-          } else {
-            line = '[ស្រី]: $line';
-          }
-        }
-      }
-      rawLines[actualIndex] = line;
+      final line = rawLines[actualIndex];
+
+      final timePattern = RegExp(
+          r'(\[\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-->|[-–])\s*\d{1,2}:\d{2}(?::\d{2})?)?\])');
+      final timeMatch = timePattern.firstMatch(line);
+      final timeStr = timeMatch?.group(1);
+
+      var textAfter = line.replaceAll(timePattern, '').trim();
+      textAfter = textAfter
+          .replaceFirst(
+              RegExp(
+                  r'^\s*[\*_]*[\[\(【（<][^\]\)】）>]+[\]\)】）>][\*_]*\s*[:៖\-–\s]*'),
+              '')
+          .replaceFirst(RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+'), '')
+          .replaceAll(RegExp(r'^[:៖\-–\s]+'), '')
+          .trim();
+
+      final newTag = currentlyFemale ? '[ប្រុស]:' : '[ស្រី]:';
+      final updatedLine = timeStr != null
+          ? '$timeStr $newTag $textAfter'
+          : '$newTag $textAfter';
+
+      rawLines[actualIndex] = updatedLine;
       setState(() {
         _scriptController.text = rawLines.join('\n');
       });
@@ -105,42 +98,34 @@ class _ResultScreenState extends State<ResultScreen> {
   void _convertAllLinesTo(bool makeFemale) {
     final rawLines = _scriptController.text.split('\n');
     final updatedLines = <String>[];
+    final timePattern = RegExp(
+        r'(\[\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-->|[-–])\s*\d{1,2}:\d{2}(?::\d{2})?)?\])');
+
     for (var line in rawLines) {
       if (line.trim().isEmpty) {
         updatedLines.add(line);
         continue;
       }
-      if (makeFemale) {
-        line = line
-            .replaceAll('[ប្រុស]:', '[ស្រី]:')
-            .replaceAll('[ប្រុស]', '[ស្រី]');
-        if (!line.contains('[ស្រី]')) {
-          final timeMatch =
-              RegExp(r'(\[\d{1,2}:\d{2}(?::\d{2})?\])').firstMatch(line);
-          if (timeMatch != null) {
-            line = line.replaceFirst(
-                timeMatch.group(1)!, '${timeMatch.group(1)!} [ស្រី]:');
-          } else {
-            line = '[ស្រី]: $line';
-          }
-        }
-      } else {
-        line = line
-            .replaceAll('[ស្រី]:', '[ប្រុស]:')
-            .replaceAll('[ស្រី]', '[ប្រុស]');
-        if (!line.contains('[ប្រុស]')) {
-          final timeMatch =
-              RegExp(r'(\[\d{1,2}:\d{2}(?::\d{2})?\])').firstMatch(line);
-          if (timeMatch != null) {
-            line = line.replaceFirst(
-                timeMatch.group(1)!, '${timeMatch.group(1)!} [ប្រុស]:');
-          } else {
-            line = '[ប្រុស]: $line';
-          }
-        }
-      }
-      updatedLines.add(line);
+      final timeMatch = timePattern.firstMatch(line);
+      final timeStr = timeMatch?.group(1);
+
+      var textAfter = line.replaceAll(timePattern, '').trim();
+      textAfter = textAfter
+          .replaceFirst(
+              RegExp(
+                  r'^\s*[\*_]*[\[\(【（<][^\]\)】）>]+[\]\)】）>][\*_]*\s*[:៖\-–\s]*'),
+              '')
+          .replaceFirst(RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+'), '')
+          .replaceAll(RegExp(r'^[:៖\-–\s]+'), '')
+          .trim();
+
+      final newTag = makeFemale ? '[ស្រី]:' : '[ប្រុស]:';
+      final updatedLine = timeStr != null
+          ? '$timeStr $newTag $textAfter'
+          : '$newTag $textAfter';
+      updatedLines.add(updatedLine);
     }
+
     setState(() {
       _scriptController.text = updatedLines.join('\n');
       if (makeFemale) {
@@ -151,6 +136,56 @@ class _ResultScreenState extends State<ResultScreen> {
     });
     _showSnackbar(
         'បានប្ដូរគ្រប់ឃ្លាទាំងអស់ទៅជា ${makeFemale ? "👩 ស្រីសុទ្ធ" : "👨 ប្រុសសុទ្ធ"} រួចរាល់!',
+        isSuccess: true);
+  }
+
+  void _autoDetectAllGenders() {
+    final rawLines = _scriptController.text.split('\n');
+    final updatedLines = <String>[];
+    final timePattern = RegExp(
+        r'(\[\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:-->|[-–])\s*\d{1,2}:\d{2}(?::\d{2})?)?\])');
+
+    final femaleKeywords = RegExp(
+        r'(?:ម៉ាក់|ម៉ែ|ម្ដាយ|ម្តាយ|អូន|កូនស្រី|ប្អូនស្រី|បងស្រី|យាយ|មីង|ប្រពន្ធ|ភរិយា|កញ្ញា|អ្នកនាង|ស្រី|នារី|បងសម្លាញ់|លោកប្ដី|ប្ដីខ្ញុំ|បងកុំ|បងឯង)');
+
+    int countFemale = 0;
+    int countMale = 0;
+
+    for (var line in rawLines) {
+      if (line.trim().isEmpty) {
+        updatedLines.add(line);
+        continue;
+      }
+      final timeMatch = timePattern.firstMatch(line);
+      final timeStr = timeMatch?.group(1);
+
+      var textAfter = line.replaceAll(timePattern, '').trim();
+      textAfter = textAfter
+          .replaceFirst(
+              RegExp(
+                  r'^\s*[\*_]*[\[\(【（<][^\]\)】）>]+[\]\)】）>][\*_]*\s*[:៖\-–\s]*'),
+              '')
+          .replaceFirst(RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+'), '')
+          .replaceAll(RegExp(r'^[:៖\-–\s]+'), '')
+          .trim();
+
+      final bool isFemale = femaleKeywords.hasMatch(line);
+      if (isFemale) {
+        countFemale++;
+      } else {
+        countMale++;
+      }
+      final tag = isFemale ? '[ស្រី]:' : '[ប្រុស]:';
+      final updatedLine =
+          timeStr != null ? '$timeStr $tag $textAfter' : '$tag $textAfter';
+      updatedLines.add(updatedLine);
+    }
+
+    setState(() {
+      _scriptController.text = updatedLines.join('\n');
+    });
+    _showSnackbar(
+        'បានវិភាគបែងចែកដោយស្វ័យប្រវត្តិ៖ 👩 ស្រី $countFemale ឃ្លា និង 👨 ប្រុស $countMale ឃ្លា!',
         isSuccess: true);
   }
 
@@ -266,6 +301,9 @@ class _ResultScreenState extends State<ResultScreen> {
         watermarkText: widget.settingsService.watermarkEnabled
             ? widget.settingsService.watermarkText
             : null,
+        watermarkFont: widget.settingsService.watermarkFont,
+        watermarkColor: widget.settingsService.watermarkColor,
+        watermarkOpacity: widget.settingsService.watermarkOpacity,
         scriptText: newScript,
         subtitleEnabled: widget.settingsService.subtitleEnabled,
         subtitleColor: widget.settingsService.subtitleColor,
@@ -313,6 +351,231 @@ class _ResultScreenState extends State<ResultScreen> {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
+    );
+  }
+
+  void _showWatermarkStyleBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final currentFont = widget.settingsService.watermarkFont;
+            final currentColor = widget.settingsService.watermarkColor;
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'រចនា Watermark Logo (Font & Color)',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded,
+                            color: Colors.white60, size: 20),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Mini preview
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Center(
+                      child: Text(
+                        widget.settingsService.watermarkText,
+                        style: FFmpegService.getKhmerWatermarkTextStyle(
+                          fontName: currentFont,
+                          fontSize: 22,
+                          color: FFmpegService.resolveWatermarkColor(
+                              currentColor,
+                              opacity: 0.40),
+                          shadows: const [
+                            Shadow(
+                              color: Color(0x66000000),
+                              offset: Offset(1.5, 1.5),
+                              blurRadius: 2.0,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  const Text(
+                    'ពុម្ពអក្សរខ្មែរ (Khmer Fonts):',
+                    style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+
+                  SizedBox(
+                    height: 90,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: WatermarkStylePresets.fonts.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, idx) {
+                        final fontOpt = WatermarkStylePresets.fonts[idx];
+                        final isSel = currentFont == fontOpt.key;
+                        return InkWell(
+                          onTap: () {
+                            widget.settingsService.watermarkFont = fontOpt.key;
+                            setModalState(() {});
+                            setState(() {});
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            width: 120,
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isSel
+                                  ? Colors.tealAccent.withValues(alpha: 0.18)
+                                  : const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isSel
+                                    ? Colors.tealAccent
+                                    : Colors.white12,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                Text(
+                                  fontOpt.category,
+                                  style: TextStyle(
+                                      color: isSel
+                                          ? Colors.tealAccent
+                                          : Colors.white38,
+                                      fontSize: 9),
+                                ),
+                                Text(
+                                  fontOpt.nameKh,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color:
+                                        isSel ? Colors.white : Colors.white70,
+                                    fontSize: 11,
+                                    fontWeight: isSel
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  const Text(
+                    'ពណ៌ Logo (Color):',
+                    style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: WatermarkStylePresets.colors.map((c) {
+                      final isSel = currentColor.toLowerCase() ==
+                          c.key.toLowerCase();
+                      return InkWell(
+                        onTap: () {
+                          widget.settingsService.watermarkColor = c.key;
+                          setModalState(() {});
+                          setState(() {});
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isSel
+                                ? c.color.withValues(alpha: 0.25)
+                                : const Color(0xFF0F172A),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isSel ? c.color : Colors.white12,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: c.color,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                c.nameKh,
+                                style: TextStyle(
+                                  color: isSel ? Colors.white : Colors.white70,
+                                  fontSize: 10.5,
+                                  fontWeight: isSel
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -466,7 +729,7 @@ class _ResultScreenState extends State<ResultScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => _convertAllLinesTo(false),
@@ -489,6 +752,29 @@ class _ResultScreenState extends State<ResultScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _autoDetectAllGenders,
+                      icon: const Icon(Icons.auto_awesome_rounded,
+                          color: Colors.amberAccent, size: 14),
+                      label: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('វិភាគស្វ័យប្រវត្តិ',
+                              style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: Colors.amberAccent))),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                            color: Colors.amberAccent, width: 0.8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 0),
+                        visualDensity: VisualDensity.compact,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 4),
@@ -499,6 +785,65 @@ class _ResultScreenState extends State<ResultScreen> {
             ],
           ),
         ),
+
+        // Watermark Logo Styling Bar
+        if (widget.settingsService.watermarkEnabled) ...[
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: _showWatermarkStyleBottomSheet,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: Colors.tealAccent.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.branding_watermark_rounded,
+                      size: 16, color: Colors.tealAccent),
+                  const SizedBox(width: 8),
+                  const Text('Logo:',
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '${widget.settingsService.watermarkText} • ${widget.settingsService.watermarkFont}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: FFmpegService.getKhmerWatermarkTextStyle(
+                        fontName: widget.settingsService.watermarkFont,
+                        fontSize: 12,
+                        color: FFmpegService.resolveWatermarkColor(
+                            widget.settingsService.watermarkColor,
+                            opacity: 1.0),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.tealAccent.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text('ប្ដូរ Font/ពណ៌ 🎨',
+                        style: TextStyle(
+                            color: Colors.tealAccent,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+
         const SizedBox(height: 12),
 
         // Dialogue list
@@ -509,19 +854,39 @@ class _ResultScreenState extends State<ResultScreen> {
           separatorBuilder: (_, __) => const SizedBox(height: 8),
           itemBuilder: (context, index) {
             final line = validLines[index].trim();
-            final timeMatch =
-                RegExp(r'\[(\d{1,2}:\d{2}(?::\d{2})?)\]').firstMatch(line);
+            final timePattern = RegExp(
+                r'\[?\(?(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?(?:\s*(?:-->|[-–])\s*\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)?)\)?\]?');
+            final timeMatch = timePattern.firstMatch(line);
             final timeStr = timeMatch?.group(1);
 
-            final isFemale = line.contains('[ស្រី]') || line.contains('ស្រី:');
-            final isMale = line.contains('[ប្រុស]') || line.contains('ប្រុស:');
+            final femaleKeywords = RegExp(
+                r'(?:ស្រី|តួស្រី|នារី|ស្ត្រី|ម្ដាយ|ម្តាយ|ម៉ាក់|ម៉ែ|យាយ|មីង|ប្រពន្ធ|ភរិយា|កូនស្រី|ប្អូនស្រី|កញ្ញា|អ្នកនាង|អូន|female|woman|girl|\bF\b|女)',
+                caseSensitive: false);
+            final maleKeywords = RegExp(
+                r'(?:ប្រុស|តួប្រុស|បុរស|ឪពុក|ពុក|ប៉ា|តា|ពូ|ប្ដី|ស្វាមី|កូនប្រុស|ប្អូនប្រុស|អ្នករៀបរាប់|អ្នកសម្រាយ|male|man|boy|narrator|\bM\b|男)',
+                caseSensitive: false);
+
+            final bracketMatch = RegExp(
+                    r'^\s*[\*_]*[\[\(【（<][^\]\)】）>]+[\]\)】）>][\*_]*\s*[:៖\-–\s]*')
+                .firstMatch(line.replaceAll(timePattern, '').trim());
+            bool isFemale = false;
+            if (bracketMatch != null) {
+              isFemale = femaleKeywords.hasMatch(bracketMatch.group(0)!);
+            } else {
+              isFemale = (femaleKeywords.hasMatch(line) &&
+                      !maleKeywords.hasMatch(line)) ||
+                  RegExp(r'(?:ម៉ាក់|ម៉ែ|ម្ដាយ|ម្តាយ|អូន|កូនស្រី|ប្អូនស្រី|បងសម្លាញ់|លោកប្ដី|ប្ដីខ្ញុំ|បងកុំ)')
+                      .hasMatch(line);
+            }
 
             var textOnly = line
-                .replaceAll(RegExp(r'\[\d{1,2}:\d{2}(?::\d{2})?\]'), '')
-                .replaceAll('[ប្រុស]:', '')
-                .replaceAll('[ស្រី]:', '')
-                .replaceAll('[ប្រុស]', '')
-                .replaceAll('[ស្រី]', '')
+                .replaceAll(timePattern, '')
+                .replaceFirst(
+                    RegExp(
+                        r'^\s*[\*_]*[\[\(【（<][^\]\)】）>]+[\]\)】）>][\*_]*\s*[:៖\-–\s]*'),
+                    '')
+                .replaceFirst(
+                    RegExp(r'^\s*([^\s:៖\-–]{1,12})\s*[:៖\-–\s]+'), '')
                 .replaceAll(RegExp(r'^[:៖\-–\s]+'), '')
                 .trim();
 
@@ -533,9 +898,7 @@ class _ResultScreenState extends State<ResultScreen> {
                 border: Border.all(
                   color: isFemale
                       ? Colors.pinkAccent.withValues(alpha: 0.35)
-                      : (isMale
-                          ? Colors.blueAccent.withValues(alpha: 0.35)
-                          : Colors.white12),
+                      : Colors.blueAccent.withValues(alpha: 0.35),
                   width: 1,
                 ),
               ),
@@ -562,50 +925,49 @@ class _ResultScreenState extends State<ResultScreen> {
                         ),
                         const SizedBox(width: 8),
                       ],
-                      if (isFemale || isMale)
-                        InkWell(
-                          onTap: () => _toggleSpeakerForLine(index, isFemale),
-                          borderRadius: BorderRadius.circular(6),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
+                      InkWell(
+                        onTap: () => _toggleSpeakerForLine(index, isFemale),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isFemale
+                                ? Colors.pinkAccent.withValues(alpha: 0.22)
+                                : Colors.blueAccent.withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
                               color: isFemale
-                                  ? Colors.pinkAccent.withValues(alpha: 0.22)
-                                  : Colors.blueAccent.withValues(alpha: 0.22),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: isFemale
-                                    ? Colors.pinkAccent
-                                    : Colors.lightBlueAccent,
-                                width: 1,
-                              ),
+                                  ? Colors.pinkAccent
+                                  : Colors.lightBlueAccent,
+                              width: 1,
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  isFemale ? '👩 ស្រី' : '👨 ប្រុស',
-                                  style: TextStyle(
-                                    color: isFemale
-                                        ? Colors.pinkAccent
-                                        : Colors.lightBlueAccent,
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Icon(
-                                  Icons.swap_horiz_rounded,
-                                  size: 13,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                isFemale ? '👩 ស្រី' : '👨 ប្រុស',
+                                style: TextStyle(
                                   color: isFemale
                                       ? Colors.pinkAccent
                                       : Colors.lightBlueAccent,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.swap_horiz_rounded,
+                                size: 13,
+                                color: isFemale
+                                    ? Colors.pinkAccent
+                                    : Colors.lightBlueAccent,
+                              ),
+                            ],
                           ),
                         ),
+                      ),
                       const Spacer(),
                       Text(
                         '#${index + 1}',
@@ -618,11 +980,11 @@ class _ResultScreenState extends State<ResultScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    textOnly,
+                    textOnly.isEmpty ? line : textOnly,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 13,
-                      height: 1.5,
+                      height: 1.45,
                     ),
                   ),
                 ],

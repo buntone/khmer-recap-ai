@@ -1,11 +1,12 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit_config.dart';
 import 'package:ffmpeg_kit_flutter_new/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 
 class VideoMetadata {
@@ -76,8 +77,8 @@ class FFmpegService {
       final file = File(compressedVideo);
       if (await file.exists()) {
         final length = await file.length();
-        // Gemini API inline data limit is 20MB. Keep comfortably under 18MB.
-        if (length > 0 && length <= 18 * 1024 * 1024) {
+        // Gemini API inline data limit is 20MB. Keep comfortably under 10MB to avoid RAM spikes on Android
+        if (length > 0 && length <= 10 * 1024 * 1024) {
           return compressedVideo;
         }
       }
@@ -87,18 +88,18 @@ class FFmpegService {
     return extractAudioForAnalysis(videoPath);
   }
 
-  /// Compresses video to 480p ultrafast H.264 (~1.5-3.5MB for 1-2 minute video)
+  /// Compresses video to 480p ultrafast H.264 (~1.0-2.5MB for 1-2 minute video)
   Future<String> compressVideoForAnalysis(String videoPath) async {
     final tempDir = await getTemporaryDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final outVideoPath = '${tempDir.path}/gemini_visual_$timestamp.mp4';
 
     // -vf "scale='min(480,iw)':-2" : Scales video proportionally to max 480 width/height
-    // -r 15 : 15 fps gives 100% adequate temporal resolution for Gemini vision and cuts payload in half
-    // -crf 32 -preset ultrafast -tune fastdecode -threads 0 : Finishes in 1-2 seconds with all CPU cores
-    // -c:a aac -b:a 48k -ac 1 : Mono audio for voice clarity
+    // -r 12 : 12 fps gives 100% adequate temporal resolution for Gemini vision and cuts payload in half
+    // -crf 34 -preset ultrafast -tune fastdecode -threads 0 : Finishes in 1-2 seconds with all CPU cores
+    // -c:a aac -b:a 40k -ac 1 : Mono audio for voice clarity
     final cmd =
-        '-y -threads 0 -i "$videoPath" -vf "scale=\'min(480,iw)\':-2" -r 15 -c:v libx264 -preset ultrafast -tune fastdecode -crf 32 -c:a aac -b:a 48k -ac 1 "$outVideoPath"';
+        '-y -threads 0 -i "$videoPath" -vf "scale=\'min(480,iw)\':-2" -r 12 -c:v libx264 -preset ultrafast -tune fastdecode -crf 34 -c:a aac -b:a 40k -ac 1 "$outVideoPath"';
 
     final session = await FFmpegKit.execute(cmd);
     final returnCode = await session.getReturnCode();
@@ -132,10 +133,175 @@ class FFmpegService {
     }
   }
 
-  /// Generates a transparent PNG image of the watermark text with sharp, crisp edges and black outline (zero blur)
+  /// Resolves the color for watermark text with configurable opacity
+  static Color resolveWatermarkColor(String colorName, {double opacity = 0.40}) {
+    final double op = opacity.clamp(0.1, 1.0);
+    switch (colorName.toLowerCase()) {
+      case 'gold':
+        return const Color(0xFFFFD700).withValues(alpha: op); // Radiant Gold
+      case 'yellow':
+        return const Color(0xFFFFEE58).withValues(alpha: op); // Bright Lemon
+      case 'white':
+        return const Color(0xFFFFFFFF).withValues(alpha: op);
+      case 'cyan':
+        return const Color(0xFF00E5FF).withValues(alpha: op);
+      case 'green':
+      case 'emerald':
+        return const Color(0xFF00E676).withValues(alpha: op);
+      case 'pink':
+        return const Color(0xFFFF4081).withValues(alpha: op);
+      case 'orange':
+        return const Color(0xFFFF9100).withValues(alpha: op);
+      case 'red':
+        return const Color(0xFFFF1744).withValues(alpha: op);
+      case 'purple':
+        return const Color(0xFFD500F9).withValues(alpha: op);
+      default:
+        return const Color(0xFFFFD700).withValues(alpha: op);
+    }
+  }
+
+  /// Resolves the designated Khmer font family dynamically
+  static TextStyle getKhmerWatermarkTextStyle({
+    required String fontName,
+    Color? color,
+    Paint? foreground,
+    required double fontSize,
+    FontWeight fontWeight = FontWeight.w700,
+    List<Shadow>? shadows,
+  }) {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return TextStyle(
+        fontFamily: fontName,
+        fontFamilyFallback: const ['Noto Sans Khmer', 'sans-serif'],
+        color: foreground == null ? color : null,
+        foreground: foreground,
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        shadows: shadows,
+      );
+    }
+
+    try {
+      switch (fontName) {
+        case 'Moul':
+          return GoogleFonts.moul(
+            color: foreground == null ? color : null,
+            foreground: foreground,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            shadows: shadows,
+          );
+        case 'Moulpali':
+          return GoogleFonts.moulpali(
+            color: foreground == null ? color : null,
+            foreground: foreground,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            shadows: shadows,
+          );
+        case 'Preahvihear':
+          return GoogleFonts.preahvihear(
+            color: foreground == null ? color : null,
+            foreground: foreground,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            shadows: shadows,
+          );
+        case 'Koulen':
+          return GoogleFonts.koulen(
+            color: foreground == null ? color : null,
+            foreground: foreground,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            shadows: shadows,
+          );
+        case 'Bayon':
+          return GoogleFonts.bayon(
+            color: foreground == null ? color : null,
+            foreground: foreground,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            shadows: shadows,
+          );
+        case 'Dangrek':
+          return GoogleFonts.dangrek(
+            color: foreground == null ? color : null,
+            foreground: foreground,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            shadows: shadows,
+          );
+        case 'Bokor':
+          return GoogleFonts.bokor(
+            color: foreground == null ? color : null,
+            foreground: foreground,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            shadows: shadows,
+          );
+        case 'Kdam Thmor Pro':
+          return GoogleFonts.kdamThmorPro(
+            color: foreground == null ? color : null,
+            foreground: foreground,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            shadows: shadows,
+          );
+        case 'Kantumruy Pro':
+          return GoogleFonts.kantumruyPro(
+            color: foreground == null ? color : null,
+            foreground: foreground,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            shadows: shadows,
+          );
+        case 'Battambang':
+          return GoogleFonts.battambang(
+            color: foreground == null ? color : null,
+            foreground: foreground,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            shadows: shadows,
+          );
+        case 'Siemreap':
+          return GoogleFonts.siemreap(
+            color: foreground == null ? color : null,
+            foreground: foreground,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            shadows: shadows,
+          );
+        case 'Noto Sans Khmer':
+        default:
+          return GoogleFonts.notoSansKhmer(
+            color: foreground == null ? color : null,
+            foreground: foreground,
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            shadows: shadows,
+          );
+      }
+    } catch (_) {
+      return TextStyle(
+        fontFamily: 'Noto Sans Khmer',
+        color: foreground == null ? color : null,
+        foreground: foreground,
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        shadows: shadows,
+      );
+    }
+  }
+
+  /// Generates a transparent PNG image of the watermark text with artistic Khmer ornamental fonts,
+  /// custom color, and 40% translucent fill + dark shadow so video content shines through cleanly.
   Future<String> createWatermarkImage({
     required String text,
     String? outputPath,
+    String fontName = 'Moul',
+    String colorName = 'gold',
+    double opacity = 0.40,
   }) async {
     final String path;
     if (outputPath != null && outputPath.isNotEmpty) {
@@ -149,16 +315,17 @@ class FFmpegService {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
-    // 1. Subtle, semi-transparent dark outline stroke (25% opacity)
+    // 1. Subtle, semi-transparent dark outline stroke (40% opacity)
     final outlineSpan = TextSpan(
       text: text,
-      style: TextStyle(
-        fontSize: 24,
-        fontWeight: FontWeight.w600,
+      style: getKhmerWatermarkTextStyle(
+        fontName: fontName,
+        fontSize: 25,
+        fontWeight: FontWeight.w700,
         foreground: Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.0
-          ..color = const Color(0x40000000), // ~25% translucent dark outline
+          ..strokeWidth = 2.6
+          ..color = const Color(0x66000000), // ~40% translucent dark outline
       ),
     );
     final outlinePainter = TextPainter(
@@ -167,13 +334,31 @@ class FFmpegService {
     );
     outlinePainter.layout();
 
-    // 2. Soft, translucent white fill (40% opacity) so video content shines through cleanly
+    // 2. Soft, 35% translucent drop shadow
+    final shadowSpan = TextSpan(
+      text: text,
+      style: getKhmerWatermarkTextStyle(
+        fontName: fontName,
+        fontSize: 25,
+        fontWeight: FontWeight.w700,
+        color: const Color(0x55000000),
+      ),
+    );
+    final shadowPainter = TextPainter(
+      text: shadowSpan,
+      textDirection: TextDirection.ltr,
+    );
+    shadowPainter.layout();
+
+    // 3. Elegant translucent colored fill (40% opacity as requested)
+    final fillColor = resolveWatermarkColor(colorName, opacity: opacity);
     final fillSpan = TextSpan(
       text: text,
-      style: const TextStyle(
-        color: Color(0x66FFFFFF), // ~40% opacity soft translucent white
-        fontSize: 24,
-        fontWeight: FontWeight.w600,
+      style: getKhmerWatermarkTextStyle(
+        fontName: fontName,
+        fontSize: 25,
+        fontWeight: FontWeight.w700,
+        color: fillColor,
       ),
     );
     final fillPainter = TextPainter(
@@ -182,12 +367,15 @@ class FFmpegService {
     );
     fillPainter.layout();
 
-    final width = (outlinePainter.width + 30).ceil();
-    final height = (outlinePainter.height + 20).ceil();
+    final width = (outlinePainter.width + 36).ceil();
+    final height = (outlinePainter.height + 26).ceil();
 
-    const offset = Offset(15, 10);
-    outlinePainter.paint(canvas, offset);
-    fillPainter.paint(canvas, offset);
+    const baseOffset = Offset(18, 13);
+    const shadowOffset = Offset(19.5, 14.5);
+
+    shadowPainter.paint(canvas, shadowOffset);
+    outlinePainter.paint(canvas, baseOffset);
+    fillPainter.paint(canvas, baseOffset);
 
     final picture = recorder.endRecording();
     final img = await picture.toImage(width, height);
@@ -236,6 +424,88 @@ class FFmpegService {
     return '$h:${m.toString().padLeft(2, '0')}:${sInt.toString().padLeft(2, '0')}.${cs.toString().padLeft(2, '0')}';
   }
 
+  static bool _fontRegistered = false;
+
+  /// Ensures bundled Noto Sans Khmer font is extracted to app documents
+  /// and registered with FFmpegKit so libass always renders Khmer subtitles perfectly.
+  Future<String?> ensureKhmerFontRegistered() async {
+    try {
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final fontsDir = Directory('${appDocDir.path}/fonts');
+      if (!await fontsDir.exists()) {
+        await fontsDir.create(recursive: true);
+      }
+
+      final fontFile = File('${fontsDir.path}/NotoSansKhmer-Bold.ttf');
+      if (!await fontFile.exists() || await fontFile.length() == 0) {
+        try {
+          final data =
+              await rootBundle.load('assets/fonts/NotoSansKhmer-Bold.ttf');
+          final bytes = data.buffer
+              .asUint8List(data.offsetInBytes, data.lengthInBytes);
+          await fontFile.writeAsBytes(bytes, flush: true);
+        } catch (e) {
+          debugPrint('Warning: Could not load bundled font asset: $e');
+        }
+      }
+
+      if (!_fontRegistered) {
+        try {
+          final fontDirs = [fontsDir.path];
+          if (Platform.isAndroid && await Directory('/system/fonts').exists()) {
+            fontDirs.add('/system/fonts');
+          }
+          await FFmpegKitConfig.setFontDirectoryList(
+            fontDirs,
+            {
+              'Noto Sans Khmer': fontFile.path,
+              'Noto Sans Khmer UI': fontFile.path,
+              'NotoSansKhmer': fontFile.path,
+              'sans-serif': fontFile.path,
+              'Default': fontFile.path,
+            },
+          );
+          _fontRegistered = true;
+        } catch (e) {
+          debugPrint('Warning: FFmpegKitConfig.setFontDirectoryList failed: $e');
+        }
+      }
+
+      return fontsDir.path;
+    } catch (e) {
+      debugPrint('ensureKhmerFontRegistered error: $e');
+      return null;
+    }
+  }
+
+  static String _wrapKhmerTextForSubtitles(String text,
+      {int maxLineChars = 24}) {
+    if (text.length <= maxLineChars || text.contains(r'\N')) return text;
+
+    final spaceIdx = text.indexOf(' ', (maxLineChars * 0.6).toInt());
+    if (spaceIdx != -1 && spaceIdx <= maxLineChars + 6) {
+      return '${text.substring(0, spaceIdx).trim()}\\N${text.substring(spaceIdx).trim()}';
+    }
+
+    int splitIdx = text.length ~/ 2;
+    while (splitIdx > 0 && splitIdx < text.length) {
+      final code = text.codeUnitAt(splitIdx);
+      final prevCode = text.codeUnitAt(splitIdx - 1);
+      final isCombining = (code >= 0x17B6 && code <= 0x17D3) || code == 0x17DD;
+      final isAfterCoeng = prevCode == 0x17D2;
+
+      if (!isCombining && !isAfterCoeng) {
+        break;
+      }
+      splitIdx++;
+    }
+
+    if (splitIdx > 0 && splitIdx < text.length) {
+      return '${text.substring(0, splitIdx).trim()}\\N${text.substring(splitIdx).trim()}';
+    }
+    return text;
+  }
+
   /// Generates a styled ASS subtitle file tuned specifically for 9:16 mobile videos (compact & elegant)
   Future<String> createSubtitlesAssFile({
     required String scriptText,
@@ -256,10 +526,10 @@ class FFmpegService {
     final isPortrait = videoHeight >= videoWidth;
     final playResX = isPortrait ? 720 : 1280;
     final playResY = isPortrait ? 1280 : 720;
-    // Compact font size: 23 for 9:16 portrait so it never looks bulky or blocks the video
-    final fontSize = isPortrait ? 23 : 28;
-    final marginV = isPortrait ? 85 : 45;
-    final marginLR = isPortrait ? 24 : 50;
+    // Compact font size: 21 for 9:16 portrait so it never looks bulky or blocks the video
+    final fontSize = isPortrait ? 21 : 25;
+    final marginV = isPortrait ? 75 : 45;
+    final marginLR = isPortrait ? 28 : 50;
 
     // ASS PrimaryColour is in &HAABBGGRR format
     String primaryColor;
@@ -290,7 +560,7 @@ class FFmpegService {
     buffer.writeln(
         'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding');
     buffer.writeln(
-        'Style: Default,sans-serif,$fontSize,$primaryColor,&H00000000,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,2.0,0.8,2,$marginLR,$marginLR,$marginV,1');
+        'Style: Default,Noto Sans Khmer,$fontSize,$primaryColor,&H00000000,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,1.8,0.6,2,$marginLR,$marginLR,$marginV,1');
     buffer.writeln('');
     buffer.writeln('[Events]');
     buffer.writeln(
@@ -327,15 +597,8 @@ class FFmpegService {
       cleanText = cleanText.replaceAll('"', '').trim();
       if (cleanText.isEmpty) continue;
 
-      // Smart line wrapping for 9:16 vertical video
-      if (cleanText.length > 22 && !cleanText.contains(r'\N')) {
-        int splitIdx = cleanText.indexOf(' ', 16);
-        if (splitIdx == -1 || splitIdx > 26) {
-          splitIdx = cleanText.length ~/ 2;
-        }
-        cleanText =
-            '${cleanText.substring(0, splitIdx).trim()}\\N${cleanText.substring(splitIdx).trim()}';
-      }
+      // Smart line wrapping for 9:16 vertical video without breaking Khmer Unicode glyphs
+      cleanText = _wrapKhmerTextForSubtitles(cleanText);
 
       parsedEvents.add({
         'start': startSec,
@@ -375,8 +638,11 @@ class FFmpegService {
     required String khmerAudioPath,
     required double duckingVolume, // 0.0 to 1.0
     String? watermarkText,
+    String? watermarkFont,
+    String? watermarkColor,
+    double watermarkOpacity = 0.40,
     String? scriptText,
-    bool subtitleEnabled = true,
+    bool subtitleEnabled = false,
     String subtitleColor = 'yellow',
     Function(int progressPercentage)? onProgress,
   }) async {
@@ -384,12 +650,20 @@ class FFmpegService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final outputVideoPath = '${tempDir.path}/khmer_recap_output_$timestamp.mp4';
 
-    // Vocal cancellation filter: cancels center Chinese speech while keeping stereo background sound
-    final bgVolume = (duckingVolume > 0.0 ? duckingVolume : 0.22)
-        .clamp(0.05, 0.40)
-        .toStringAsFixed(2);
-    final bgAudioFilter =
-        '[0:a]aformat=channel_layouts=stereo,pan=stereo|c0=0.5*c0-0.5*c1|c1=0.5*c1-0.5*c0,volume=$bgVolume[bg];[1:a]volume=1.35[khmer];[khmer][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]';
+    // Register Android system Khmer fonts with FFmpegKit's fontconfig so subtitles render crisp glyphs
+    await ensureKhmerFontRegistered();
+
+    // Clean audio ducking filter without phase-cancellation clicking / ticking artifacts
+    final double vol = duckingVolume.clamp(0.0, 1.0);
+    final String bgAudioFilter;
+    if (vol <= 0.01) {
+      // Ducking is 0%: Mute original audio completely for 100% pure, crystal-clear Khmer voice
+      bgAudioFilter = '[1:a]volume=1.25[aout]';
+    } else {
+      final bgVolStr = vol.toStringAsFixed(2);
+      bgAudioFilter =
+          '[0:a]volume=$bgVolStr[bg];[1:a]volume=1.25[khmer];[khmer][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]';
+    }
 
     final videoMeta = await probeVideo(originalVideoPath);
 
@@ -404,8 +678,12 @@ class FFmpegService {
     String? watermarkImgPath;
     if (watermarkText != null && watermarkText.trim().isNotEmpty) {
       try {
-        watermarkImgPath =
-            await createWatermarkImage(text: watermarkText.trim());
+        watermarkImgPath = await createWatermarkImage(
+          text: watermarkText.trim(),
+          fontName: watermarkFont ?? 'Moul',
+          colorName: watermarkColor ?? 'gold',
+          opacity: watermarkOpacity,
+        );
       } catch (e) {
         debugPrint('Warning: Could not create watermark image: $e');
       }
@@ -425,10 +703,14 @@ class FFmpegService {
       }
     }
 
+    String? subFilterParam;
     String? escapedAssPath;
     if (subtitleAssPath != null) {
-      escapedAssPath =
-          subtitleAssPath.replaceAll(r'\', '/').replaceAll(':', r'\:');
+      escapedAssPath = subtitleAssPath
+          .replaceAll(r'\', '/')
+          .replaceAll(':', r'\:')
+          .replaceAll("'", r"\'");
+      subFilterParam = "ass='$escapedAssPath'";
     }
 
     // Build video filter graph
@@ -436,18 +718,18 @@ class FFmpegService {
     String vMap = '0:v:0';
     String watermarkInput = '';
 
-    if (watermarkImgPath != null && escapedAssPath != null) {
+    if (watermarkImgPath != null && subFilterParam != null) {
       watermarkInput = '-i "$watermarkImgPath"';
       vFilter =
-          "[0:v]subtitles='$escapedAssPath'[vsub];[vsub][2:v]overlay=x='20+(W-w-40)*(0.5+0.5*sin(t*0.6))':y='25+(H-h-50)*(0.5+0.5*cos(t*0.45))'[vout]";
+          "[0:v]$subFilterParam[vsub];[vsub][2:v]overlay=x='20+(W-w-40)*(0.5+0.5*sin(t*0.6))':y='25+(H-h-50)*(0.5+0.5*cos(t*0.45))'[vout]";
       vMap = '[vout]';
     } else if (watermarkImgPath != null) {
       watermarkInput = '-i "$watermarkImgPath"';
       vFilter =
           "[0:v][2:v]overlay=x='20+(W-w-40)*(0.5+0.5*sin(t*0.6))':y='25+(H-h-50)*(0.5+0.5*cos(t*0.45))'[vout]";
       vMap = '[vout]';
-    } else if (escapedAssPath != null) {
-      vFilter = "[0:v]subtitles='$escapedAssPath'[vout]";
+    } else if (subFilterParam != null) {
+      vFilter = "[0:v]$subFilterParam[vout]";
       vMap = '[vout]';
     }
 
@@ -477,6 +759,29 @@ class FFmpegService {
       return outputVideoPath;
     }
 
+    final logs = await session.getAllLogsAsString();
+    debugPrint('FFmpeg with ass filter failed: $logs');
+
+    // Subtitle retry: if 'ass' filter failed, retry with 'subtitles' filter
+    if (subFilterParam != null && escapedAssPath != null) {
+      final retrySubParam = "subtitles='$escapedAssPath'";
+      final retryVFilter = vFilter.replaceAll(subFilterParam, retrySubParam);
+      final retryFilterGraph =
+          hasOriginalAudio ? '$retryVFilter;$bgAudioFilter' : retryVFilter;
+      final retryAMap = hasOriginalAudio ? '-map "[aout]"' : '-map 1:a:0';
+      final retryCmd =
+          '-y -threads 0 -i "$originalVideoPath" -i "$khmerAudioPath" $watermarkInput '
+          '-filter_complex "$retryFilterGraph" '
+          '-map "$vMap" $retryAMap -c:v libx264 -preset ultrafast -tune fastdecode -crf 23 -c:a aac -b:a 192k -shortest "$outputVideoPath"';
+
+      final retrySession = await FFmpegKit.execute(retryCmd);
+      if (ReturnCode.isSuccess(await retrySession.getReturnCode())) {
+        return outputVideoPath;
+      }
+      final retryLogs = await retrySession.getAllLogsAsString();
+      debugPrint('FFmpeg with subtitles filter fallback failed: $retryLogs');
+    }
+
     // Graceful fallback: If subtitle or filter complex encountered any error on this device,
     // run baseline audio merge without subtitle filter so user always gets their video successfully
     String fallbackCmd;
@@ -498,8 +803,8 @@ class FFmpegService {
       return outputVideoPath;
     }
 
-    final logs = await session.getAllLogsAsString();
-    throw Exception('FFmpeg បរាជ័យក្នុងការច្របាច់បញ្ចូលសំឡេង និងវីដេអូ: $logs');
+    final fallbackLogs = await fallbackSession.getAllLogsAsString();
+    throw Exception('FFmpeg បរាជ័យក្នុងការច្របាច់បញ្ចូលសំឡេង និងវីដេអូ: $fallbackLogs');
   }
 
   /// Exports standalone Khmer recap audio to persistent Android storage

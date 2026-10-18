@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../models/watermark_style.dart';
+import '../services/ffmpeg_service.dart';
 import '../services/settings_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -20,8 +22,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _watermarkTextController;
   late double _syncDelay;
   late bool _watermarkEnabled;
-  late bool _subtitleEnabled;
-  late String _subtitleColor;
+  late String _watermarkFont;
+  late String _watermarkColor;
+  late double _watermarkOpacity;
   bool _isTestingKeys = false;
   Map<String, bool?> _keyValidationStatus = {};
 
@@ -41,8 +44,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextEditingController(text: widget.settingsService.watermarkText);
     _syncDelay = widget.settingsService.audioSyncDelay;
     _watermarkEnabled = widget.settingsService.watermarkEnabled;
-    _subtitleEnabled = widget.settingsService.subtitleEnabled;
-    _subtitleColor = widget.settingsService.subtitleColor;
+    _watermarkFont = widget.settingsService.watermarkFont;
+    _watermarkColor = widget.settingsService.watermarkColor;
+    _watermarkOpacity = widget.settingsService.watermarkOpacity;
   }
 
   @override
@@ -135,8 +139,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     widget.settingsService.audioSyncDelay = _syncDelay;
     widget.settingsService.watermarkEnabled = _watermarkEnabled;
     widget.settingsService.watermarkText = _watermarkTextController.text.trim();
-    widget.settingsService.subtitleEnabled = _subtitleEnabled;
-    widget.settingsService.subtitleColor = _subtitleColor;
+    widget.settingsService.watermarkFont = _watermarkFont;
+    widget.settingsService.watermarkColor = _watermarkColor;
+    widget.settingsService.watermarkOpacity = _watermarkOpacity;
+    widget.settingsService.subtitleEnabled = false;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -638,7 +644,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     Switch(
                       value: _watermarkEnabled,
-                      activeColor: Colors.tealAccent,
+                      activeThumbColor: Colors.tealAccent,
                       onChanged: (val) =>
                           setState(() => _watermarkEnabled = val),
                     ),
@@ -654,6 +660,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 6),
                   TextField(
                     controller: _watermarkTextController,
+                    onChanged: (_) => setState(() {}),
                     style: const TextStyle(color: Colors.white, fontSize: 13),
                     decoration: InputDecoration(
                       hintText: 'ឧ. ដោយ.B.T.movie',
@@ -671,111 +678,331 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               const BorderSide(color: Colors.tealAccent)),
                     ),
                   ),
-                ],
-              ],
-            ),
 
-            const SizedBox(height: 20),
-
-            // On-Video Khmer Subtitles Card
-            _buildSectionCard(
-              title: 'អក្សររត់លើវីដេអូ (Khmer Subtitles)',
-              subtitle: 'បង្ហាញអក្សររត់ភាសាខ្មែរទំហំតូចល្មមលើវីដេអូ (9:16 Optimized)',
-              icon: Icons.subtitles_rounded,
-              color: Colors.amberAccent,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('បើកដំណើរការអក្សររត់ខ្មែរ',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13)),
-                          Text('រត់តាមវិនាទី និងមាត់តួអង្គនិយាយលើវីដេអូ',
-                              style: TextStyle(
-                                  color: Colors.white54, fontSize: 11)),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: _subtitleEnabled,
-                      activeColor: Colors.amberAccent,
-                      onChanged: (val) =>
-                          setState(() => _subtitleEnabled = val),
-                    ),
-                  ],
-                ),
-                if (_subtitleEnabled) ...[
                   const SizedBox(height: 14),
-                  const Text('ជ្រើសរើសពណ៌អក្សររត់ (Subtitle Color):',
-                      style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _buildColorChip('yellow', '🟡 លឿងមាស', Colors.amberAccent),
-                      const SizedBox(width: 8),
-                      _buildColorChip('white', '⚪ សស្អាត', Colors.white),
-                      const SizedBox(width: 8),
-                      _buildColorChip('cyan', '🔵 ផ្ទៃមេឃ', Colors.cyanAccent),
-                      const SizedBox(width: 8),
-                      _buildColorChip('green', '🟢 បៃតង', Colors.greenAccent),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  // Live Subtitle Preview
+
+                  // Live Preview Card
                   Container(
                     width: double.infinity,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 14, horizontal: 16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0F172A), Color(0xFF1E1B4B)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white12),
+                      border: Border.all(
+                          color: Colors.tealAccent.withValues(alpha: 0.3)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        const Text('គំរូអក្សររត់លើវីដេអូ (Preview):',
-                            style: TextStyle(color: Colors.white38, fontSize: 10)),
-                        const SizedBox(height: 6),
-                        Text(
-                          'បីឆ្នាំមុន នាងត្រូវបានគេបណ្តេញចេញពីត្រកូល',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: _getPreviewColor(_subtitleColor),
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.bold,
-                            shadows: const [
-                              Shadow(
-                                  color: Colors.black,
-                                  blurRadius: 4,
-                                  offset: Offset(1, 1)),
-                              Shadow(
-                                  color: Colors.black,
-                                  blurRadius: 4,
-                                  offset: Offset(-1, -1)),
-                            ],
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.remove_red_eye_rounded,
+                                    size: 14, color: Colors.tealAccent),
+                                SizedBox(width: 5),
+                                Text(
+                                  'គំរូ Logo ជាក់ស្តែង (Live Preview):',
+                                  style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.white10,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'ស្រមោល: ${(_watermarkOpacity * 100).toInt()}%',
+                                style: const TextStyle(
+                                    color: Colors.white60, fontSize: 10),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.black45,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: Text(
+                            _watermarkTextController.text.trim().isEmpty
+                                ? 'ដោយ.B.T.movie'
+                                : _watermarkTextController.text.trim(),
+                            textAlign: TextAlign.center,
+                            style: FFmpegService.getKhmerWatermarkTextStyle(
+                              fontName: _watermarkFont,
+                              fontSize: 22,
+                              color: FFmpegService.resolveWatermarkColor(
+                                  _watermarkColor,
+                                  opacity: _watermarkOpacity),
+                              shadows: const [
+                                Shadow(
+                                  color: Color(0x66000000),
+                                  offset: Offset(1.5, 1.5),
+                                  blurRadius: 2.5,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
+
+                  const SizedBox(height: 14),
+
+                  // Font selection
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'ជ្រើសរើសពុម្ពអក្សរខ្មែរ (Khmer Font):',
+                        style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        _watermarkFont,
+                        style: const TextStyle(
+                            color: Colors.tealAccent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
-                  const Text(
-                    '💡 អក្សររត់ត្រូវបានរចនាទំហំតូចល្មម (Compact) មិនបាំងវីដេអូ និងមិនធំលើសវីដេអូ 9:16 ឡើយ។',
-                    style: TextStyle(color: Colors.white54, fontSize: 10.5),
+
+                  SizedBox(
+                    height: 105,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: WatermarkStylePresets.fonts.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, idx) {
+                        final fontOpt = WatermarkStylePresets.fonts[idx];
+                        final isSelected = _watermarkFont == fontOpt.key;
+                        return InkWell(
+                          onTap: () =>
+                              setState(() => _watermarkFont = fontOpt.key),
+                          borderRadius: BorderRadius.circular(12),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 140,
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? Colors.tealAccent.withValues(alpha: 0.15)
+                                  : const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isSelected
+                                    ? Colors.tealAccent
+                                    : Colors.white12,
+                                width: isSelected ? 1.5 : 1.0,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? Colors.tealAccent
+                                            .withValues(alpha: 0.25)
+                                        : Colors.white10,
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: Text(
+                                    fontOpt.category,
+                                    style: TextStyle(
+                                      color: isSelected
+                                          ? Colors.tealAccent
+                                          : Colors.white54,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                Center(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      'សម្រាយរឿង',
+                                      style: FFmpegService
+                                          .getKhmerWatermarkTextStyle(
+                                        fontName: fontOpt.key,
+                                        fontSize: 16,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : Colors.white70,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  fontOpt.nameKh,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? Colors.tealAccent
+                                        : Colors.white60,
+                                    fontSize: 10,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Color selection
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'ជ្រើសរើសពណ៌ Logo (Watermark Color):',
+                        style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        _watermarkColor.toUpperCase(),
+                        style: TextStyle(
+                          color: FFmpegService.resolveWatermarkColor(
+                              _watermarkColor,
+                              opacity: 1.0),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: WatermarkStylePresets.colors.map((c) {
+                      final isSelected =
+                          _watermarkColor.toLowerCase() == c.key.toLowerCase();
+                      return InkWell(
+                        onTap: () => setState(() => _watermarkColor = c.key),
+                        borderRadius: BorderRadius.circular(10),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? c.color.withValues(alpha: 0.20)
+                                : const Color(0xFF0F172A),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color:
+                                  isSelected ? c.color : Colors.white12,
+                              width: isSelected ? 1.6 : 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 14,
+                                height: 14,
+                                decoration: BoxDecoration(
+                                  color: c.color,
+                                  shape: BoxShape.circle,
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: c.color
+                                                .withValues(alpha: 0.6),
+                                            blurRadius: 4,
+                                          )
+                                        ]
+                                      : null,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                c.nameKh,
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.white70,
+                                  fontSize: 11,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Opacity Note
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded,
+                            size: 15, color: Colors.tealAccent),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'ស្រមោល និងភាពថ្លាត្រូវបានកំណត់ 40% (ជួយឱ្យមើលវីដេអូច្បាស់ មិនបាំងសាច់រឿង)',
+                            style:
+                                TextStyle(color: Colors.white60, fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ],
             ),
+
+
 
             const SizedBox(height: 24),
 
@@ -873,66 +1100,5 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Color _getPreviewColor(String colorTheme) {
-    switch (colorTheme.toLowerCase()) {
-      case 'white':
-        return Colors.white;
-      case 'cyan':
-        return Colors.cyanAccent;
-      case 'green':
-        return Colors.greenAccent;
-      case 'yellow':
-      default:
-        return Colors.amberAccent;
-    }
-  }
 
-  Widget _buildColorChip(String theme, String label, Color color) {
-    final isSelected = _subtitleColor == theme;
-    return Expanded(
-      child: InkWell(
-        onTap: () => setState(() => _subtitleColor = theme),
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? color.withValues(alpha: 0.22)
-                : const Color(0xFF0F172A),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isSelected ? color : Colors.white12,
-              width: isSelected ? 1.5 : 1,
-            ),
-          ),
-          child: Column(
-            children: [
-              Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white30),
-                ),
-              ),
-              const SizedBox(height: 4),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : Colors.white60,
-                    fontSize: 10,
-                    fontWeight:
-                        isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

@@ -1,9 +1,16 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:khmer_recap_ai/models/watermark_style.dart';
 import 'package:khmer_recap_ai/services/khmer_tts_service.dart';
 import 'package:khmer_recap_ai/services/ffmpeg_service.dart';
 
 void main() {
+  setUpAll(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    GoogleFonts.config.allowRuntimeFetching = false;
+  });
+
   test('KhmerVoice.prasith mode guarantees 100% male voice for all dialogue',
       () {
     final tts = KhmerTtsService(
@@ -94,6 +101,52 @@ void main() {
     });
   });
 
+  testWidgets(
+      'createWatermarkImage renders traditional Khmer ornamental fonts and colors correctly',
+      (tester) async {
+    await tester.runAsync(() async {
+      final ffmpeg = FFmpegService();
+      final tempDir = Directory.systemTemp;
+
+      expect(WatermarkStylePresets.fonts.length, greaterThanOrEqualTo(10));
+      expect(WatermarkStylePresets.colors.length, greaterThanOrEqualTo(8));
+
+      // Test Moul (អក្សរមូល) with gold color and 40% opacity
+      final moulOutPath =
+          '${tempDir.path}/test_wm_moul_${DateTime.now().millisecondsSinceEpoch}.png';
+      final moulResult = await ffmpeg.createWatermarkImage(
+        text: 'ដោយ.B.T.movie',
+        fontName: 'Moul',
+        colorName: 'gold',
+        opacity: 0.40,
+        outputPath: moulOutPath,
+      );
+      final moulFile = File(moulResult);
+      expect(await moulFile.exists(), isTrue);
+      expect(await moulFile.length(), greaterThan(100));
+
+      // Test Preahvihear (អក្សរព្រះវិហារ) with cyan color
+      final preahvihearOutPath =
+          '${tempDir.path}/test_wm_pv_${DateTime.now().millisecondsSinceEpoch}.png';
+      final pvResult = await ffmpeg.createWatermarkImage(
+        text: 'សម្រាយសាច់រឿង',
+        fontName: 'Preahvihear',
+        colorName: 'cyan',
+        opacity: 0.40,
+        outputPath: preahvihearOutPath,
+      );
+      final pvFile = File(pvResult);
+      expect(await pvFile.exists(), isTrue);
+      expect(await pvFile.length(), greaterThan(100));
+
+      // Clean up
+      try {
+        await moulFile.delete();
+        await pvFile.delete();
+      } catch (_) {}
+    });
+  });
+
   test(
       'createSubtitlesAssFile generates valid ASS subtitles formatted for 9:16',
       () async {
@@ -125,10 +178,45 @@ void main() {
         content.contains('Dialogue: 0,0:00:01.00,0:00:04.00,Default'), isTrue);
     expect(
         content.contains('Dialogue: 0,0:00:04.00,0:00:07.00,Default'), isTrue);
+    expect(content.contains('Default,Noto Sans Khmer,'), isTrue); // Bundled Noto Sans Khmer font
     expect(content.contains('&H0000E5FF'), isTrue); // Yellow color
 
     try {
       await file.delete();
     } catch (_) {}
+  });
+
+  test(
+      'AutoDialogue mode accurately detects fullwidth brackets, Chinese tags, and content-based female dialogue',
+      () {
+    final tts = KhmerTtsService(
+      endpoint: '',
+      apiToken: '',
+      prasithVoiceId: 'male_prasith',
+      sreymomVoiceId: 'female_sreymom',
+    );
+
+    const script = '''
+[00:01 - 00:04] 【ស្រី】: ម៉ែមកដើម្បីយករបស់របរឱ្យកូនវិញ។
+[00:04 - 00:07] **[ប្រុស]**: ម៉ែកុំបារម្ភអី កូនដឹងខ្លួនឯងច្បាស់ហើយ!
+[00:07 - 00:10] (ស្រី): បងសម្លាញ់ កុំទៅចោលខ្ញុំអីណា!
+[00:10 - 00:13] ម៉ាក់ប្រាប់កូនហើយ ត្រូវតែប្រយ័ត្នខ្លួន!
+[00:13 - 00:16] [ប្រុស]: បាទម៉ាក់ កូនយល់ហើយ!
+''';
+
+    final segments =
+        tts.parseDialogueSegmentsForTesting(script, KhmerVoice.autoDialogue);
+    expect(segments.length, 5);
+
+    // Line 1: 【ស្រី】 fullwidth bracket -> female
+    expect(segments[0].voiceId, 'female_sreymom');
+    // Line 2: **[ប្រុស]** markdown bold tag -> male
+    expect(segments[1].voiceId, 'male_prasith');
+    // Line 3: (ស្រី) parentheses + "បងសម្លាញ់" -> female
+    expect(segments[2].voiceId, 'female_sreymom');
+    // Line 4: Untagged "ម៉ាក់ប្រាប់កូនហើយ" -> inferred female
+    expect(segments[3].voiceId, 'female_sreymom');
+    // Line 5: [ប្រុស] -> male
+    expect(segments[4].voiceId, 'male_prasith');
   });
 }
