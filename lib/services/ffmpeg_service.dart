@@ -703,7 +703,7 @@ class FFmpegService {
         bgAudioFilter =
             '[0:a]aformat=channel_layouts=stereo,asplit=2[bg_low][bg_high];'
             '[bg_low]lowpass=f=220,volume=1.25[bg_bass];'
-            '[bg_high]highpass=f=220,stereotools=mlev=0.0:slev=1.45,equalizer=f=350:width_type=q:w=1.0:g=-18,equalizer=f=1000:width_type=q:w=0.7:g=-26,equalizer=f=2500:width_type=q:w=0.8:g=-24,equalizer=f=3600:width_type=q:w=1.2:g=-18,highshelf=f=5200:g=4.0[bg_sides];'
+            '[bg_high]highpass=f=220,pan=stereo|c0=0.5*c0-0.5*c1|c1=0.5*c1-0.5*c0,equalizer=f=350:width_type=q:w=1.0:g=-18,equalizer=f=1000:width_type=q:w=0.7:g=-26,equalizer=f=2500:width_type=q:w=0.8:g=-24,equalizer=f=3600:width_type=q:w=1.2:g=-18,highshelf=f=5200:g=4.0,volume=1.45[bg_sides];'
             '[bg_bass][bg_sides]amix=inputs=2:dropout_transition=0,volume=$bgVolStr[bg];'
             '[1:a]volume=1.30[khmer];'
             '[bg][khmer]amix=inputs=2:duration=first:dropout_transition=0[aout]';
