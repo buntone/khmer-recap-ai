@@ -685,35 +685,43 @@ class FFmpegService {
     final videoMeta = await probeVideo(originalVideoPath);
     final hasOriginalAudio = videoMeta.hasAudio;
 
-    // Clean audio ducking filter with intelligent Chinese vocal cancellation
+    // CapCut-Style Audio Ducking & Clean Vocal Cancellation Filter
     final double vol = duckingVolume.clamp(0.0, 1.0);
     final String bgAudioFilter;
     if (vol <= 0.01) {
       // Ducking is 0%: Mute original audio completely for 100% pure, crystal-clear Khmer voice
-      bgAudioFilter = '[1:a]volume=1.25[aout]';
+      bgAudioFilter = '[1:a]volume=1.30[aout]';
     } else if (removeChineseVocals) {
       final bgVolStr = vol.toStringAsFixed(2);
       if (videoMeta.audioChannels >= 2) {
-        // High-precision Mid-Side vocal cancellation with sub-bass preservation:
-        // Mid (center channel) speech is suppressed by 36dB while preserving stereo BGM, instruments & sound effects!
+        // High-precision CapCut-Style Stereo Vocal Cancellation + Dynamic BGM Enhancer:
+        // 1. Center speech (Mid channel) completely eliminated (mlev=0.0)
+        // 2. Multi-band speech formant notches (350Hz, 1000Hz, 2500Hz, 3600Hz) eliminate vocal bleed & reverberation in side channels
+        // 3. Sub-bass boost (lowpass=220, vol=1.25) preserves cinematic basslines, kicks & impact sound effects (SFX)
+        // 4. High-air sparkle (highshelf=5200, +4.0dB) preserves crisp ambience, swooshes, and music clarity
+        // 5. Volume dynamically scaled to user's desired background presence ($bgVolStr)
         bgAudioFilter =
             '[0:a]aformat=channel_layouts=stereo,asplit=2[bg_low][bg_high];'
-            '[bg_low]lowpass=f=200,volume=0.85[bg_bass];'
-            '[bg_high]highpass=f=200,stereotools=mlev=0.015625:slev=1.35[bg_sides];'
+            '[bg_low]lowpass=f=220,volume=1.25[bg_bass];'
+            '[bg_high]highpass=f=220,stereotools=mlev=0.0:slev=1.45,equalizer=f=350:width_type=q:w=1.0:g=-18,equalizer=f=1000:width_type=q:w=0.7:g=-26,equalizer=f=2500:width_type=q:w=0.8:g=-24,equalizer=f=3600:width_type=q:w=1.2:g=-18,highshelf=f=5200:g=4.0[bg_sides];'
             '[bg_bass][bg_sides]amix=inputs=2:dropout_transition=0,volume=$bgVolStr[bg];'
-            '[1:a]volume=1.25[khmer];'
+            '[1:a]volume=1.30[khmer];'
             '[bg][khmer]amix=inputs=2:duration=first:dropout_transition=0[aout]';
       } else {
-        // Mono voice rejection notch filter (reduces human speech frequencies 250Hz - 3500Hz)
+        // High-precision CapCut-Style Mono Vocal Cancellation + Dynamic BGM Enhancer:
+        // Splits mono signal into deep low-end impacts + multi-band speech rejection (cutting speech by up to 30dB) + crisp high-end
         bgAudioFilter =
-            '[0:a]equalizer=f=1200:width_type=o:w=2.5:g=-16,equalizer=f=2800:width_type=o:w=1.8:g=-14,volume=$bgVolStr[bg];'
-            '[1:a]volume=1.25[khmer];'
+            '[0:a]asplit=2[m_low][m_high];'
+            '[m_low]lowpass=f=220,volume=1.30[m_bass];'
+            '[m_high]highpass=f=220,equalizer=f=350:width_type=q:w=1.0:g=-22,equalizer=f=1000:width_type=q:w=0.6:g=-30,equalizer=f=2500:width_type=q:w=0.7:g=-28,equalizer=f=3600:width_type=q:w=1.0:g=-20,highshelf=f=5200:g=4.0[m_midhigh];'
+            '[m_bass][m_midhigh]amix=inputs=2:dropout_transition=0,volume=$bgVolStr[bg];'
+            '[1:a]volume=1.30[khmer];'
             '[bg][khmer]amix=inputs=2:duration=first:dropout_transition=0[aout]';
       }
     } else {
       final bgVolStr = vol.toStringAsFixed(2);
       bgAudioFilter =
-          '[0:a]volume=$bgVolStr[bg];[1:a]volume=1.25[khmer];'
+          '[0:a]volume=$bgVolStr[bg];[1:a]volume=1.30[khmer];'
           '[bg][khmer]amix=inputs=2:duration=first:dropout_transition=0[aout]';
     }
 

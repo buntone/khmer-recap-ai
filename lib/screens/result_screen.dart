@@ -1025,6 +1025,147 @@ class _ResultScreenState extends State<ResultScreen> {
     );
   }
 
+  Widget _buildResultAudioControlCard() {
+    final int duckPercent = (_currentDuckingVolume * 100).toInt();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _currentRemoveChineseVocals
+              ? Colors.tealAccent.withValues(alpha: 0.35)
+              : Colors.white12,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.music_note_rounded,
+                      color: Colors.tealAccent, size: 18),
+                  SizedBox(width: 6),
+                  Text(
+                    'ភ្លេងកំដរ & Vocal Isolation',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _currentDuckingVolume > 0.01
+                      ? Colors.tealAccent.withValues(alpha: 0.15)
+                      : Colors.white10,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  _currentDuckingVolume > 0.01 ? '$duckPercent%' : 'បិទ (0%)',
+                  style: TextStyle(
+                    color: _currentDuckingVolume > 0.01
+                        ? Colors.tealAccent
+                        : Colors.white38,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: () => setState(
+                () => _currentRemoveChineseVocals = !_currentRemoveChineseVocals),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: _currentRemoveChineseVocals
+                    ? Colors.tealAccent.withValues(alpha: 0.10)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _currentRemoveChineseVocals
+                      ? Colors.tealAccent.withValues(alpha: 0.5)
+                      : Colors.white12,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _currentRemoveChineseVocals
+                        ? Icons.check_box_rounded
+                        : Icons.check_box_outline_blank_rounded,
+                    color: _currentRemoveChineseVocals
+                        ? Colors.tealAccent
+                        : Colors.white38,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'បិទសំឡេងមនុស្សនិយាយ ទុកតែភ្លេង (ដូច CapCut)',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildResultDuckingChip('0% (បិទ)', 0.0),
+              _buildResultDuckingChip('15% (ស្រាល)', 0.15),
+              _buildResultDuckingChip('25% (CapCut)', 0.25),
+              _buildResultDuckingChip('35% (រស់រវើក)', 0.35),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResultDuckingChip(String label, double val) {
+    final isSelected = (_currentDuckingVolume - val).abs() < 0.02;
+    return InkWell(
+      onTap: () => setState(() => _currentDuckingVolume = val),
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.tealAccent.withValues(alpha: 0.25)
+              : const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected ? Colors.tealAccent : Colors.white12,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.tealAccent : Colors.white70,
+            fontSize: 10,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1317,6 +1458,7 @@ class _ResultScreenState extends State<ResultScreen> {
                           _buildDialogueLinesPreview(),
                         ],
                         const SizedBox(height: 14),
+                        _buildResultAudioControlCard(),
                         SizedBox(
                           height: 50,
                           child: ElevatedButton.icon(

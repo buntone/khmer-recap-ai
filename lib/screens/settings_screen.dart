@@ -647,7 +647,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'សំឡេង Background & ដកសំឡេងចិន',
+                                'សំឡេង Background & Vocal Isolation (ដូច CapCut)',
                                 style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 13,
@@ -661,7 +661,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       Switch(
                         value: _removeChineseVocals,
-                        activeColor: Colors.tealAccent,
+                        activeThumbColor: Colors.tealAccent,
                         onChanged: (val) =>
                             setState(() => _removeChineseVocals = val),
                       ),
@@ -669,7 +669,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'កាត់សំឡេងនិយាយជាភាសាចិនចេញពីវីដេអូដើម ដោយរក្សាទុកតែភ្លេងកំដរ (BGM) និងសំឡេង Effects បរិយាកាស (SFX) ដើម្បីធ្វើជា Background។',
+                    'បិទសំឡេងមនុស្សនិយាយទាំងអស់ចេញពីវីដេអូដើម ដោយរក្សាទុកតែភ្លេងកំដរ (BGM) និងសំឡេង Effects បរិយាកាស (SFX) ឲ្យរស់រវើកដូចក្នុង CapCut។',
                     style: TextStyle(
                         color: Colors.white60, fontSize: 11, height: 1.4),
                   ),

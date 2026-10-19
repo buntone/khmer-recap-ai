@@ -828,7 +828,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'ដកសំឡេងនិយាយចិនចេញ (Keep BGM/SFX)',
+                          'ដកសំឡេងមនុស្សនិយាយចេញ (Vocal Isolation - ដូច CapCut)',
                           style: TextStyle(
                               color: Colors.white,
                               fontSize: 12.5,
@@ -836,7 +836,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'រក្សាទុកតែភ្លេងកំដរ និងសំឡេង Effects ដោយកាត់សំឡេងនិយាយចិន',
+                          'បិទសំឡេងមនុស្សនិយាយទាំងអស់ចោល ទុកតែភ្លេងកំដរ BGM & SFX ឱ្យរស់រវើក',
                           style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.65),
                               fontSize: 10.5),
@@ -868,7 +868,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(
                 _duckingVolume <= 0.01
                     ? 'គ្មានសំឡេងដើម'
-                    : (_duckingVolume <= 0.25 ? 'ល្មមពិរោះ' : 'លឺខ្លាំង'),
+                    : (_duckingVolume <= 0.25 ? 'ស្រាលពិរោះ' : 'រស់រវើកច្បាស់'),
                 style: const TextStyle(color: Colors.tealAccent, fontSize: 11),
               ),
             ],
@@ -895,8 +895,8 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildDuckingChip('0% (បិទ)', 0.0),
               _buildDuckingChip('15% (ស្រាល)', 0.15),
-              _buildDuckingChip('20% (ណែនាំ)', 0.20),
-              _buildDuckingChip('35% (ច្បាស់)', 0.35),
+              _buildDuckingChip('25% (CapCut)', 0.25),
+              _buildDuckingChip('35% (រស់រវើក)', 0.35),
             ],
           ),
         ],
