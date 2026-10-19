@@ -51,3 +51,6 @@ app.*.map.json
 screen*.png
 phone_screen.png
 sample_script.txt
+.kotlin/
+**/android/.kotlin/
+phone_screen*.png
