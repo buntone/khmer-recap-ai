@@ -705,16 +705,18 @@ class FFmpegService {
           '[bg_low_in]lowpass=f=220,volume=1.40[bg_bass];'
           '[bg_high_in]highpass=f=220,equalizer=f=350:width_type=q:w=1.0:g=-16,equalizer=f=1100:width_type=q:w=0.6:g=-26,equalizer=f=2600:width_type=q:w=0.7:g=-24,equalizer=f=3600:width_type=q:w=1.0:g=-16,highshelf=f=5000:g=3.5[bg_midhigh];'
           '[bg_bass][bg_midhigh]amix=inputs=2:dropout_transition=0,volume=$bgVolStr[bg_raw];'
-          '[1:a]volume=1.30[khmer];'
-          '[bg_raw][khmer]sidechaincompress=threshold=0.07:ratio=6:attack=15:release=280:makeup=1.1[bg_ducked];'
-          '[bg_ducked][khmer]amix=inputs=2:duration=first:dropout_transition=0[aout]';
+          '[1:a]asplit=2[khmer_sc][khmer_mix];'
+          '[khmer_mix]volume=1.30[khmer_voice];'
+          '[bg_raw][khmer_sc]sidechaincompress=threshold=0.07:ratio=6:attack=15:release=280:makeup=1.1[bg_ducked];'
+          '[bg_ducked][khmer_voice]amix=inputs=2:duration=first:dropout_transition=0[aout]';
     } else {
       final bgVolStr = vol.toStringAsFixed(2);
       bgAudioFilter =
           '[0:a]volume=$bgVolStr[bg_raw];'
-          '[1:a]volume=1.30[khmer];'
-          '[bg_raw][khmer]sidechaincompress=threshold=0.07:ratio=6:attack=15:release=280:makeup=1.1[bg_ducked];'
-          '[bg_ducked][khmer]amix=inputs=2:duration=first:dropout_transition=0[aout]';
+          '[1:a]asplit=2[khmer_sc][khmer_mix];'
+          '[khmer_mix]volume=1.30[khmer_voice];'
+          '[bg_raw][khmer_sc]sidechaincompress=threshold=0.07:ratio=6:attack=15:release=280:makeup=1.1[bg_ducked];'
+          '[bg_ducked][khmer_voice]amix=inputs=2:duration=first:dropout_transition=0[aout]';
     }
 
     String? watermarkImgPath;
