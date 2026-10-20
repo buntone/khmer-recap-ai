@@ -315,12 +315,20 @@ class _ResultScreenState extends State<ResultScreen> {
 
       final videoMeta =
           await _ffmpegService.probeVideo(widget.originalVideoPath);
-      final newAudioPath = await ttsService.synthesizeKhmerSpeech(
-        text: newScript,
-        voice: _currentVoice,
-        totalDurationSeconds: videoMeta.durationSeconds,
-        syncDelaySeconds: widget.settingsService.audioSyncDelay,
-      );
+
+      // Fast Re-Mux optimization: If script & voice haven't changed, reuse existing synthesized audio
+      String newAudioPath = _currentKhmerAudioPath;
+      final bool scriptChanged =
+          newScript.trim() != widget.generatedScript.trim();
+      final bool voiceChanged = _currentVoice != widget.selectedVoice;
+      if (scriptChanged || voiceChanged || !await File(newAudioPath).exists()) {
+        newAudioPath = await ttsService.synthesizeKhmerSpeech(
+          text: newScript,
+          voice: _currentVoice,
+          totalDurationSeconds: videoMeta.durationSeconds,
+          syncDelaySeconds: widget.settingsService.audioSyncDelay,
+        );
+      }
 
       final newVideoPath = await _ffmpegService.mergeKhmerVoiceWithVideo(
         originalVideoPath: widget.originalVideoPath,
@@ -1068,11 +1076,13 @@ class _ResultScreenState extends State<ResultScreen> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  _currentDuckingVolume > 0.01 ? '$duckPercent%' : 'បិទ (0%)',
+                  _currentDuckingVolume > 0.01
+                      ? '$duckPercent%'
+                      : '🔇 បិទសំឡេងចិន (0%)',
                   style: TextStyle(
                     color: _currentDuckingVolume > 0.01
                         ? Colors.tealAccent
-                        : Colors.white38,
+                        : Colors.greenAccent,
                     fontSize: 10.5,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1110,12 +1120,16 @@ class _ResultScreenState extends State<ResultScreen> {
                     size: 20,
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'បិទសំឡេងមនុស្សនិយាយ ទុកតែភ្លេង (ដូច CapCut)',
+                      _currentDuckingVolume <= 0.01
+                          ? '✅ បានបិទសំឡេងចិន ១០០% (ស្អាតសុទ្ធ)'
+                          : 'កាត់សំឡេងនិយាយចិនចេញ នៅពេលបើកសំឡេង Background',
                       style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 11.5,
+                          color: _currentDuckingVolume <= 0.01
+                              ? Colors.greenAccent
+                              : Colors.white,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -1127,10 +1141,10 @@ class _ResultScreenState extends State<ResultScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildResultDuckingChip('0% (បិទ)', 0.0),
+              _buildResultDuckingChip('0% (បិទសំឡេងចិន)', 0.0),
               _buildResultDuckingChip('15% (ស្រាល)', 0.15),
-              _buildResultDuckingChip('25% (CapCut)', 0.25),
-              _buildResultDuckingChip('35% (រស់រវើក)', 0.35),
+              _buildResultDuckingChip('25% (ល្មម)', 0.25),
+              _buildResultDuckingChip('35% (ច្បាស់)', 0.35),
             ],
           ),
         ],

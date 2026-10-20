@@ -35,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   VideoMetadata? _videoMetadata;
 
   KhmerVoice _selectedVoice = KhmerVoice.autoDialogue;
-  double _duckingVolume = 0.20; // Default 20% background audio (recommended for recap)
+  double _duckingVolume = 0.0; // Default 0.0: Mute Chinese speech 100%
   bool _removeChineseVocals = true; // Removes spoken Chinese voice, preserving BGM/SFX
 
   bool _isProcessing = false;
@@ -776,15 +776,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 decoration: BoxDecoration(
                   color: _duckingVolume > 0.01
                       ? Colors.tealAccent.withValues(alpha: 0.15)
-                      : Colors.white10,
+                      : Colors.greenAccent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  _duckingVolume > 0.01 ? '$duckPercent%' : 'បិទ (0%)',
+                  _duckingVolume > 0.01
+                      ? '$duckPercent%'
+                      : '🔇 បិទសំឡេងចិន (0%)',
                   style: TextStyle(
                     color: _duckingVolume > 0.01
                         ? Colors.tealAccent
-                        : Colors.white38,
+                        : Colors.greenAccent,
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                   ),
@@ -836,9 +838,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'បិទសំឡេងមនុស្សនិយាយទាំងអស់ចោល ទុកតែភ្លេងកំដរ BGM & SFX ឱ្យរស់រវើក',
+                          _duckingVolume <= 0.01
+                              ? '✅ បានបិទសំឡេងនិយាយចិនចោល ១០០% (គ្មានសំឡេងចិនមួយម៉ាត់)'
+                              : 'កាត់សំឡេងនិយាយចិនចេញ នៅពេលបើកលាយសំឡេង Background',
                           style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.65),
+                              color: _duckingVolume <= 0.01
+                                  ? Colors.greenAccent
+                                  : Colors.white.withValues(alpha: 0.65),
                               fontSize: 10.5),
                         ),
                       ],
@@ -856,7 +862,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 _duckingVolume <= 0.01
                     ? Icons.volume_off_rounded
                     : Icons.volume_down_rounded,
-                color: Colors.tealAccent,
+                color: _duckingVolume <= 0.01
+                    ? Colors.greenAccent
+                    : Colors.tealAccent,
                 size: 18,
               ),
               const SizedBox(width: 8),
@@ -867,9 +875,13 @@ class _HomeScreenState extends State<HomeScreen> {
               const Spacer(),
               Text(
                 _duckingVolume <= 0.01
-                    ? 'គ្មានសំឡេងដើម'
+                    ? '🔇 គ្មានសំឡេងចិន (ស្អាតសុទ្ធ)'
                     : (_duckingVolume <= 0.25 ? 'ស្រាលពិរោះ' : 'រស់រវើកច្បាស់'),
-                style: const TextStyle(color: Colors.tealAccent, fontSize: 11),
+                style: TextStyle(
+                    color: _duckingVolume <= 0.01
+                        ? Colors.greenAccent
+                        : Colors.tealAccent,
+                    fontSize: 11),
               ),
             ],
           ),
@@ -893,10 +905,10 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildDuckingChip('0% (បិទ)', 0.0),
+              _buildDuckingChip('0% (បិទសំឡេងចិន)', 0.0),
               _buildDuckingChip('15% (ស្រាល)', 0.15),
-              _buildDuckingChip('25% (CapCut)', 0.25),
-              _buildDuckingChip('35% (រស់រវើក)', 0.35),
+              _buildDuckingChip('25% (ល្មម)', 0.25),
+              _buildDuckingChip('35% (ច្បាស់)', 0.35),
             ],
           ),
         ],
