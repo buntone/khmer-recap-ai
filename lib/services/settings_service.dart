@@ -123,7 +123,7 @@ class SettingsService {
   set voiceSreymomId(String val) => _prefs.setString(keyVoiceSreymomId, val);
 
   double get defaultDuckingVolume =>
-      _prefs.getDouble(keyDefaultDucking) ?? 0.0; // Default 0%: Mute Chinese speech 100%
+      _prefs.getDouble(keyDefaultDucking) ?? 0.60; // Default 60%: CapCut Auto-Ducking
   set defaultDuckingVolume(double val) =>
       _prefs.setDouble(keyDefaultDucking, val);
 

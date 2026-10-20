@@ -35,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   VideoMetadata? _videoMetadata;
 
   KhmerVoice _selectedVoice = KhmerVoice.autoDialogue;
-  double _duckingVolume = 0.0; // Default 0.0: Mute Chinese speech 100%
+  double _duckingVolume = 0.60; // Default 0.60: Dynamic CapCut Auto-Ducking
   bool _removeChineseVocals = true; // Removes spoken Chinese voice, preserving BGM/SFX
 
   bool _isProcessing = false;
@@ -839,8 +839,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 2),
                         Text(
                           _duckingVolume <= 0.01
-                              ? '✅ បានបិទសំឡេងនិយាយចិនចោល ១០០% (គ្មានសំឡេងចិនមួយម៉ាត់)'
-                              : 'កាត់សំឡេងនិយាយចិនចេញ នៅពេលបើកលាយសំឡេង Background',
+                              ? '🔇 បានបិទសំឡេងដើម ១០០% (យកតែសំឡេងខ្មែរស្អាតសុទ្ធ)'
+                              : 'ពេលនិយាយ បន្ថយសំឡេង background ស្វ័យប្រវត្តិ។ ពេលឈប់និយាយ បង្កើនសំឡេងសម្រុកដៃ សម្រុកជើង និងភ្លេងឡើងវិញ!',
                           style: TextStyle(
                               color: _duckingVolume <= 0.01
                                   ? Colors.greenAccent
@@ -875,8 +875,10 @@ class _HomeScreenState extends State<HomeScreen> {
               const Spacer(),
               Text(
                 _duckingVolume <= 0.01
-                    ? '🔇 គ្មានសំឡេងចិន (ស្អាតសុទ្ធ)'
-                    : (_duckingVolume <= 0.25 ? 'ស្រាលពិរោះ' : 'រស់រវើកច្បាស់'),
+                    ? '🔇 បិទសំឡេងដើម (0%)'
+                    : (_duckingVolume <= 0.45
+                        ? 'កំដរស្រាល'
+                        : 'Auto-Ducking ដូច CapCut'),
                 style: TextStyle(
                     color: _duckingVolume <= 0.01
                         ? Colors.greenAccent
@@ -894,10 +896,10 @@ class _HomeScreenState extends State<HomeScreen> {
               trackHeight: 3.5,
             ),
             child: Slider(
-              value: _duckingVolume.clamp(0.0, 0.8),
+              value: _duckingVolume.clamp(0.0, 1.0),
               min: 0.0,
-              max: 0.8,
-              divisions: 16,
+              max: 1.0,
+              divisions: 20,
               onChanged: (val) => setState(() => _duckingVolume = val),
             ),
           ),
@@ -905,10 +907,10 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildDuckingChip('0% (បិទសំឡេងចិន)', 0.0),
-              _buildDuckingChip('15% (ស្រាល)', 0.15),
-              _buildDuckingChip('25% (ល្មម)', 0.25),
-              _buildDuckingChip('35% (ច្បាស់)', 0.35),
+              _buildDuckingChip('0% (បិទ)', 0.0),
+              _buildDuckingChip('35% (ស្រាល)', 0.35),
+              _buildDuckingChip('60% (CapCut)', 0.60),
+              _buildDuckingChip('80% (កក្រើក)', 0.80),
             ],
           ),
         ],

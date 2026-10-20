@@ -1123,13 +1123,13 @@ class _ResultScreenState extends State<ResultScreen> {
                   Expanded(
                     child: Text(
                       _currentDuckingVolume <= 0.01
-                          ? '✅ បានបិទសំឡេងចិន ១០០% (ស្អាតសុទ្ធ)'
-                          : 'កាត់សំឡេងនិយាយចិនចេញ នៅពេលបើកសំឡេង Background',
+                          ? '🔇 បានបិទសំឡេងដើម ១០០% (យកតែសំឡេងខ្មែរស្អាតសុទ្ធ)'
+                          : 'ពេលនិយាយ បន្ថយ background ស្វ័យប្រវត្តិ។ ពេលឈប់និយាយ បង្កើនសំឡេងសម្រុកដៃ សម្រុកជើងឡើងវិញ!',
                       style: TextStyle(
                           color: _currentDuckingVolume <= 0.01
                               ? Colors.greenAccent
                               : Colors.white,
-                          fontSize: 11,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -1141,10 +1141,10 @@ class _ResultScreenState extends State<ResultScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildResultDuckingChip('0% (បិទសំឡេងចិន)', 0.0),
-              _buildResultDuckingChip('15% (ស្រាល)', 0.15),
-              _buildResultDuckingChip('25% (ល្មម)', 0.25),
-              _buildResultDuckingChip('35% (ច្បាស់)', 0.35),
+              _buildResultDuckingChip('0% (បិទ)', 0.0),
+              _buildResultDuckingChip('35% (ស្រាល)', 0.35),
+              _buildResultDuckingChip('60% (CapCut)', 0.60),
+              _buildResultDuckingChip('80% (កក្រើក)', 0.80),
             ],
           ),
         ],
