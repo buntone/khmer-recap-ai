@@ -163,9 +163,11 @@ class GeminiRecapService {
 [00:04 - 00:07] [ស្រី]: (ក្នុងចិត្ត) ថ្ងៃនេះខ្ញុំត្រលប់មកវិញ ដើម្បីទាមទារភាពយុត្តិធម៌!
 [00:07 - 00:09] [ស្រី]: ម៉ែមកដើម្បីយករបស់របរឱ្យកូនវិញ។
 [00:10 - 00:13] [ប្រុស]: ម៉ែ! កូនជាប់រវល់ការងារនៅទីនេះ។
-៩. **ចំពោះវីដេអូវែង (៦ ទៅ ១០ នាទី)**:
-   - ត្រូវតាមដានតួអង្គ មាត់កម្រើក និងអក្សររត់រហូតដល់វិនាទីចុងក្រោយនៃវីដេអូ ហាមកាត់ផ្ដាច់ ឬឈប់បកប្រែពាក់កណ្ដាលទីជាដាច់ខាត!
-   - ត្រូវបែងចែក [ប្រុស]: និង [ស្រី]: ឱ្យបានម៉ត់ចត់ និងត្រឹមត្រូវ ១០០% គ្រប់ឈុតឆាកទាំងអស់ពីដើមដល់ចប់!
+១០. **🛑 លក្ខខណ្ឌកំហិតដាច់ខាត (CRITICAL MANDATORY ZERO-CHINESE TRANSLATION RULE)**:
+    - គ្រប់ឃ្លាសន្ទនាទាំងអស់ ត្រូវតែបកប្រែជា «អក្សរខ្មែរ» ១០០% (ALL OUTPUT MUST BE 100% IN KHMER SCRIPT)!
+    - ហាមដាច់ខាត ហាមសរសេរអក្សរចិន (汉字) សូម្បីតែមួយតួក្នុងចម្លើយ! (ABSOLUTELY ZERO CHINESE CHARACTERS ALLOWED).
+    - ហាមចម្លងអក្សររត់ចិន (Do NOT transcribe or output Chinese characters/subtitles).
+    - ត្រូវបកប្រែចេញជាភាសាខ្មែរដែលពិរោះ រលូន និងទាក់ទាញបែបសម្រាយរឿងកុនភ្លាមៗ។
 ''';
 
     final normalizedMime = mimeType == 'audio/mpeg' ? 'audio/mp3' : mimeType;
@@ -215,8 +217,31 @@ class GeminiRecapService {
 
           final text = response.text?.trim() ?? '';
           if (text.isNotEmpty) {
-            rawScript = text;
-            break;
+            final khmerCount =
+                RegExp(r'[\u1780-\u17B3]').allMatches(text).length;
+            final chineseCount =
+                RegExp(r'[\u4E00-\u9FFF]').allMatches(text).length;
+
+            // If Gemini output contains Chinese or has insufficient Khmer characters:
+            // Trigger instant second-pass text-to-text translation!
+            if (chineseCount > 0 || khmerCount < 20) {
+              final translated = await _translateChineseOrRawScriptToKhmer(
+                rawText: text,
+                modelName: modelName,
+                apiKey: currentKey,
+              );
+              final transKhmerCount =
+                  RegExp(r'[\u1780-\u17B3]').allMatches(translated).length;
+              if (translated.isNotEmpty && transKhmerCount >= 20) {
+                rawScript = translated;
+                break;
+              }
+            }
+
+            if (khmerCount >= 20) {
+              rawScript = text;
+              break;
+            }
           }
         } catch (e) {
           lastError = e;
@@ -235,10 +260,51 @@ class GeminiRecapService {
         throw Exception('Gemini AI បរាជ័យក្នុងការបកប្រែ: $lastError');
       }
       throw Exception(
-          'មិនអាចចាប់សំឡេងសន្ទនាភាសាចិនក្នុងវីដេអូដើម្បីបកប្រែបានឡើយ។');
+          'មិនអាចចាប់សំឡេងសន្ទនា ឬបកប្រែជាភាសាខ្មែរបានឡើយ។ សូមចុចបង្កើតម្ដងទៀត។');
     }
 
     return _parseScriptFromResponse(rawScript);
+  }
+
+  /// Instant secondary pass: translates Chinese subtitles or raw dialogue directly into spoken Khmer
+  Future<String> _translateChineseOrRawScriptToKhmer({
+    required String rawText,
+    required String modelName,
+    required String apiKey,
+  }) async {
+    try {
+      final model = GenerativeModel(
+        model: modelName,
+        apiKey: apiKey,
+        generationConfig: GenerationConfig(
+          temperature: 0.1,
+          maxOutputTokens: 8192,
+        ),
+      );
+
+      final translationPrompt = '''
+You are an expert Chinese-to-Khmer film dubbing translator.
+The following script was extracted from a Chinese video, but it contains Chinese characters or needs translation into natural Khmer narration.
+
+CRITICAL RULES:
+1. Translate 100% into natural, rhythmic spoken Khmer script (ភាសាខ្មែរ / អក្សរខ្មែរ).
+2. DO NOT output ANY Chinese characters (汉字). Outputting Chinese is strictly prohibited!
+3. Keep the exact timestamps [MM:SS - MM:SS] or [MM:SS] at the start of each line.
+4. Keep or assign speaker tags [ប្រុស]: for male or [ស្រី]: for female.
+5. Elongate sentences slightly so the Khmer voice sounds complete and matches character mouth movements.
+
+SCRIPT TO TRANSLATE:
+$rawText
+
+OUTPUT (Plain text only, 100% Khmer script, absolutely zero Chinese):
+''';
+
+      final resp =
+          await model.generateContent([Content.text(translationPrompt)]);
+      return resp.text?.trim() ?? '';
+    } catch (_) {
+      return '';
+    }
   }
 
   /// Parses response into formatted script lines [MM:SS] [ប្រុស]: Text
@@ -516,6 +582,12 @@ class GeminiRecapService {
 
     final result = buffer.toString().trim();
     if (result.isNotEmpty) return result;
+
+    final khmerCount = RegExp(r'[\u1780-\u17B3]').allMatches(rawText).length;
+    if (khmerCount < 10) {
+      throw Exception(
+          'Gemini មិនបានបកប្រែជាភាសាខ្មែរឡើយ (គ្មានអត្ថបទជាភាសាខ្មែរ)។ សូមចុចបង្កើតវីដេអូសម្រាយរឿងម្ដងទៀត។');
+    }
 
     return rawText.replaceAll(RegExp(r'["{}\[\]]'), '').trim();
   }

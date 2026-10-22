@@ -219,4 +219,55 @@ void main() {
     // Line 5: [ប្រុស] -> male
     expect(segments[4].voiceId, 'male_prasith');
   });
+
+  test(
+      'parseDialogueSegments guarantees no timestamps or speaker tags are left in dialogue text',
+      () {
+    final tts = KhmerTtsService(
+      endpoint: '',
+      apiToken: '',
+      prasithVoiceId: 'male_prasith',
+      sreymomVoiceId: 'female_sreymom',
+    );
+
+    const script = '''
+[00:01 - 00:04] [ប្រុស]: សួស្តីអ្នកទាំងអស់គ្នា
+[00:05 - 00:09] [ស្រី]: (ក្នុងចិត្ត) ថ្ងៃនេះអាកាសធាតុល្អណាស់
+''';
+
+    final segments =
+        tts.parseDialogueSegmentsForTesting(script, KhmerVoice.autoDialogue);
+    expect(segments.length, 2);
+
+    for (final seg in segments) {
+      expect(seg.text.contains('['), isFalse);
+      expect(seg.text.contains(']'), isFalse);
+      expect(seg.text.contains(':'), isFalse);
+      expect(seg.text.contains('00:'), isFalse);
+      expect(seg.text.startsWith('ប្រុស'), isFalse);
+      expect(seg.text.startsWith('ស្រី'), isFalse);
+      expect(seg.text.contains('ក្នុងចិត្ត'), isFalse);
+    }
+    expect(segments[0].text, 'សួស្តីអ្នកទាំងអស់គ្នា');
+    expect(segments[1].text, 'ថ្ងៃនេះអាកាសធាតុល្អណាស់');
+  });
+
+  test('Chinese dialogue without Khmer returns empty segments', () {
+    final tts = KhmerTtsService(
+      endpoint: '',
+      apiToken: '',
+      prasithVoiceId: 'male_prasith',
+      sreymomVoiceId: 'female_sreymom',
+    );
+
+    const chineseScript = '''
+[00:01 - 00:04] [男]: 师傅，我们去哪儿？
+[00:04 - 00:07] [女]: 去机场。
+''';
+
+    final segments = tts.parseDialogueSegmentsForTesting(
+        chineseScript, KhmerVoice.autoDialogue);
+    expect(segments.isEmpty, isTrue);
+  });
 }
+

@@ -721,9 +721,11 @@ class KhmerTtsService {
         }
       }
 
-      // Clean text: strip brackets, quotes, leftover colons
+      // Clean text: strip brackets, quotes, leftover colons, embedded timestamps and speaker tags
       var cleanLine = lineText
-          .replaceAll(RegExp(r'["{}\[\]]'), '')
+          .replaceAll(timePattern, '')
+          .replaceAll(RegExp(r'[\*_]*[\[\(【（<]\s*(?:ក្នុងចិត្ត|គិតក្នុងចិត្ត|内心|心想|独白)\s*[\]\)】）>][\*_]*'), '')
+          .replaceAll(RegExp(r'["{}\[\]【】]'), '')
           .replaceAll(RegExp(r'^[:៖\-–\s]+'), '')
           .trim();
 
@@ -736,8 +738,9 @@ class KhmerTtsService {
               '')
           .trim();
 
+      // Ensure dialogue line has actual Khmer letters (at least 2 Khmer consonants/vowels)
       if (cleanLine.isNotEmpty &&
-          RegExp(r'[\u1780-\u17FF]').hasMatch(cleanLine)) {
+          RegExp(r'[\u1780-\u17B3]').allMatches(cleanLine).length >= 2) {
         segments.add(_DialogueSegment(
           startSeconds: startSeconds,
           endSeconds: endSeconds,
@@ -762,16 +765,26 @@ class KhmerTtsService {
       }
     }
 
+    // Fallback if no timestamped segments were parsed (e.g. plain text without timestamps)
     if (segments.isEmpty) {
-      final fallbackClean = cleanInput
-          .replaceFirst(genericTagStartPattern, '')
-          .replaceAll(RegExp(r'["{}\[\]]'), '')
+      var fallbackClean = cleanInput
+          .replaceAll(timePattern, '')
+          .replaceAll(genericTagStartPattern, '')
+          .replaceAll(
+              RegExp(
+                  r'[\*_]*[\[\(【（<][^\]\)】）>]+[\]\)】）>][\*_]*\s*[:៖\-–\s]*'),
+              '')
+          .replaceAll(RegExp(r'["{}\[\]【】]'), '')
+          .replaceAll(RegExp(r'^\s*[:៖\-–\s]+', multiLine: true), '')
           .trim();
-      if (fallbackClean.isNotEmpty &&
-          RegExp(r'[\u1780-\u17FF]').hasMatch(fallbackClean)) {
+
+      // Strict validation: must contain genuine Khmer dialogue (at least 5 Khmer consonants)
+      final khmerMatches = RegExp(r'[\u1780-\u17B3]').allMatches(fallbackClean);
+      if (khmerMatches.length >= 5) {
         segments.add(_DialogueSegment(
           startSeconds: 0.0,
-          voiceId: prasithVoiceId,
+          voiceId:
+              (mode == KhmerVoice.sreymom) ? sreymomVoiceId : prasithVoiceId,
           text: fallbackClean,
         ));
       }
@@ -781,15 +794,28 @@ class KhmerTtsService {
   }
 
   /// Sends request to Microsoft Edge Neural TTS or Custom Khmer TTS engine with auto-retry
-  /// Sends request to Microsoft Edge Neural TTS or Custom Khmer TTS engine with auto-retry
   Future<List<int>> _callTtsEndpoint({
     required String text,
     required String voiceId,
     required double speed,
     required double pitch,
   }) async {
-    final cleanText = text.trim();
-    if (cleanText.isEmpty) {
+    // Bulletproof sanitization: strip any leftover timestamps and speaker tags so TTS never reads numbers or "ប្រុស/ស្រី"
+    var cleanText = text
+        .replaceAll(
+            RegExp(
+                r'\[?\b\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?(?:\s*(?:-->|[-–])\s*\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)?\]?'),
+            '')
+        .replaceAll(
+            RegExp(
+                r'^\s*[\*_]*[\[\(【（<]?(?:(?:តួ)?(?:ប្រុស|ស្រី|បុរស|នារី|ស្ត្រី)|អ្នករៀបរាប់|male|female|man|woman|boy|girl|narrator|\b[MF]\b)[\]\)】）>]*[\*_]*\s*[:៖\-–\s]*',
+                caseSensitive: false),
+            '')
+        .replaceAll(RegExp(r'["{}\[\]【】]'), '')
+        .replaceAll(RegExp(r'^[:៖\-–\s]+'), '')
+        .trim();
+
+    if (cleanText.isEmpty || !RegExp(r'[\u1780-\u17B3]').hasMatch(cleanText)) {
       return [];
     }
 

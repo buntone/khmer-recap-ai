@@ -377,17 +377,32 @@ class _StudioMainScreenState extends State<StudioMainScreen> {
         currentSeconds += 4.0;
       }
 
-      final isFemale = trimmed.contains('[ស្រី]') ||
-          trimmed.contains('【ស្រី】') ||
-          trimmed.toLowerCase().contains('female');
+      final femaleKeywords = RegExp(
+          r'(?:ស្រី|នារី|ស្ត្រី|ម្ដាយ|ម្តាយ|ម៉ាក់|ម៉ែ|យាយ|មីង|ប្រពន្ធ|ភរិយា|កូនស្រី|female|woman|\bF\b|女)',
+          caseSensitive: false);
+      final isFemale = femaleKeywords.hasMatch(trimmed);
 
-      final cleanText = trimmed
+      var cleanText = trimmed
           .replaceAll(timeRegex, '')
-          .replaceAll(RegExp(r'\[(ស្រី|ប្រុស|female|male)\][:\s]*', caseSensitive: false), '')
-          .replaceAll(RegExp(r'【(ស្រី|ប្រុស)】[:\s]*'), '')
+          .replaceAll(
+              RegExp(
+                  r'\[?\b\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?(?:\s*(?:-->|[-–])\s*\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)?\]?'),
+              '')
+          .replaceAll(
+              RegExp(
+                  r'^\s*[\*_]*[\[\(【（<]?(?:(?:តួ)?(?:ប្រុស|ស្រី|បុរស|នារី|ស្ត្រី)|អ្នករៀបរាប់|male|female|man|woman|boy|girl|narrator|\b[MF]\b)[\]\)】）>]*[\*_]*\s*[:៖\-–\s]*',
+                  caseSensitive: false),
+              '')
+          .replaceAll(
+              RegExp(
+                  r'[\*_]*[\[\(【（<]\s*(?:ក្នុងចិត្ត|គិតក្នុងចិត្ត|内心|心想|独白)\s*[\]\)】）>][\*_]*'),
+              '')
+          .replaceAll(RegExp(r'["{}\[\]【】]'), '')
+          .replaceAll(RegExp(r'^[:៖\-–\s]+'), '')
           .trim();
 
-      if (cleanText.isNotEmpty) {
+      if (cleanText.isNotEmpty &&
+          RegExp(r'[\u1780-\u17B3]').hasMatch(cleanText)) {
         parsed.add(SubtitleEntry(
           index: entryIndex++,
           startTimeMs: startMs,
