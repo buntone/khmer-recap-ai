@@ -7,6 +7,7 @@ import '../models/watermark_style.dart';
 import '../services/ffmpeg_service.dart';
 import '../services/khmer_tts_service.dart';
 import '../services/settings_service.dart';
+import '../theme/studio_theme.dart';
 
 class ResultScreen extends StatefulWidget {
   final String dubbedVideoPath;
@@ -15,6 +16,9 @@ class ResultScreen extends StatefulWidget {
   final String generatedScript;
   final KhmerVoice selectedVoice;
   final double duckingVolume;
+  final bool removeChineseVocals;
+  final String? selectedBgmTrackId;
+  final double? bgmVolume;
   final SettingsService settingsService;
 
   const ResultScreen({
@@ -26,10 +30,10 @@ class ResultScreen extends StatefulWidget {
     required this.selectedVoice,
     required this.duckingVolume,
     this.removeChineseVocals = true,
+    this.selectedBgmTrackId,
+    this.bgmVolume,
     required this.settingsService,
   });
-
-  final bool removeChineseVocals;
 
   @override
   State<ResultScreen> createState() => _ResultScreenState();
@@ -47,6 +51,8 @@ class _ResultScreenState extends State<ResultScreen> {
   late KhmerVoice _currentVoice;
   late double _currentDuckingVolume;
   late bool _currentRemoveChineseVocals;
+  late String _currentBgmTrackId;
+  late double _currentBgmVolume;
 
   @override
   void initState() {
@@ -54,6 +60,10 @@ class _ResultScreenState extends State<ResultScreen> {
     _currentVoice = widget.selectedVoice;
     _currentDuckingVolume = widget.duckingVolume;
     _currentRemoveChineseVocals = widget.removeChineseVocals;
+    _currentBgmTrackId = widget.selectedBgmTrackId ??
+        widget.settingsService.selectedBgmTrack;
+    _currentBgmVolume =
+        widget.bgmVolume ?? widget.settingsService.bgmVolume;
     _currentDubbedVideoPath = widget.dubbedVideoPath;
     _currentKhmerAudioPath = widget.khmerAudioPath;
     _scriptController = TextEditingController(text: widget.generatedScript);
@@ -335,6 +345,8 @@ class _ResultScreenState extends State<ResultScreen> {
         khmerAudioPath: newAudioPath,
         duckingVolume: _currentDuckingVolume,
         removeChineseVocals: _currentRemoveChineseVocals,
+        bgmTrackId: _currentBgmTrackId,
+        bgmVolume: _currentBgmVolume,
         watermarkText: widget.settingsService.watermarkEnabled
             ? widget.settingsService.watermarkText
             : null,
@@ -1034,17 +1046,17 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   Widget _buildResultAudioControlCard() {
-    final int duckPercent = (_currentDuckingVolume * 100).toInt();
+    final int volPercent = (_currentDuckingVolume * 100).toInt();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: _currentRemoveChineseVocals
-              ? Colors.tealAccent.withValues(alpha: 0.35)
-              : Colors.white12,
+          color: StudioTheme.neonCyan.withValues(alpha: 0.35),
+          width: 1.4,
         ),
       ),
       child: Column(
@@ -1053,37 +1065,32 @@ class _ResultScreenState extends State<ResultScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.music_note_rounded,
-                      color: Colors.tealAccent, size: 18),
-                  SizedBox(width: 6),
-                  Text(
-                    'ភ្លេងកំដរ & Vocal Isolation',
+                  Icon(Icons.movie_filter_rounded,
+                      color: StudioTheme.neonCyan, size: 18),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'សំឡេងភ្លេងក្នុងសាច់រឿង (Movie Audio)',
                     style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.bold),
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: _currentDuckingVolume > 0.01
-                      ? Colors.tealAccent.withValues(alpha: 0.15)
-                      : Colors.white10,
+                  color: const Color(0xFF00E676).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Text(
-                  _currentDuckingVolume > 0.01
-                      ? '$duckPercent%'
-                      : '🔇 បិទសំឡេងចិន (0%)',
+                child: const Text(
+                  '⚡ សង្កត់សំឡេងចិនបាត់ឈឹង',
                   style: TextStyle(
-                    color: _currentDuckingVolume > 0.01
-                        ? Colors.tealAccent
-                        : Colors.greenAccent,
-                    fontSize: 10.5,
+                    color: Color(0xFF00E676),
+                    fontSize: 10,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1091,60 +1098,77 @@ class _ResultScreenState extends State<ResultScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          InkWell(
-            onTap: () => setState(
-                () => _currentRemoveChineseVocals = !_currentRemoveChineseVocals),
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: _currentRemoveChineseVocals
-                    ? Colors.tealAccent.withValues(alpha: 0.10)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: _currentRemoveChineseVocals
-                      ? Colors.tealAccent.withValues(alpha: 0.5)
-                      : Colors.white12,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded,
+                    color: Color(0xFF00E676), size: 14),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'ភ្លេងរឿងឮធម្មតា • ពេលខ្មែរនិយាយ សង្កត់សំឡេងចិនឱ្យបាត់ឈឹង ១០០%',
+                    style: TextStyle(color: Colors.white, fontSize: 10.5),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _currentRemoveChineseVocals
-                        ? Icons.check_box_rounded
-                        : Icons.check_box_outline_blank_rounded,
-                    color: _currentRemoveChineseVocals
-                        ? Colors.tealAccent
-                        : Colors.white38,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _currentDuckingVolume <= 0.01
-                          ? '🔇 បានបិទសំឡេងដើម ១០០% (យកតែសំឡេងខ្មែរស្អាតសុទ្ធ)'
-                          : 'ពេលនិយាយ បន្ថយ background ស្វ័យប្រវត្តិ។ ពេលឈប់និយាយ បង្កើនសំឡេងសម្រុកដៃ សម្រុកជើងឡើងវិញ!',
-                      style: TextStyle(
-                          color: _currentDuckingVolume <= 0.01
-                              ? Colors.greenAccent
-                              : Colors.white,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
           Row(
+            children: [
+              Icon(Icons.volume_up_rounded,
+                  color: StudioTheme.neonCyan, size: 16),
+              const SizedBox(width: 6),
+              const Text(
+                'កម្រិតសំឡេងដើម:',
+                style: TextStyle(color: Colors.white70, fontSize: 11),
+              ),
+              const Spacer(),
+              Text(
+                '$volPercent%',
+                style: TextStyle(
+                  color: StudioTheme.neonCyan,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: StudioTheme.neonCyan,
+              inactiveTrackColor: Colors.white12,
+              thumbColor: StudioTheme.neonCyan,
+              trackHeight: 3,
+            ),
+            child: Slider(
+              value: _currentDuckingVolume.clamp(0.0, 1.0),
+              min: 0.0,
+              max: 1.0,
+              divisions: 20,
+              onChanged: (val) {
+                setState(() {
+                  _currentDuckingVolume = val;
+                  widget.settingsService.defaultDuckingVolume = val;
+                });
+              },
+            ),
+          ),
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildResultDuckingChip('0% (បិទ)', 0.0),
-              _buildResultDuckingChip('35% (ស្រាល)', 0.35),
-              _buildResultDuckingChip('60% (CapCut)', 0.60),
-              _buildResultDuckingChip('80% (កក្រើក)', 0.80),
+              _buildResultDuckingChip('បិទ (0%)', 0.0),
+              _buildResultDuckingChip('30% (ស្រាល)', 0.30),
+              _buildResultDuckingChip('60% (មធ្យម)', 0.60),
+              _buildResultDuckingChip('80% (ណែនាំ)', 0.80),
+              _buildResultDuckingChip('100% (ពេញ)', 1.00),
             ],
           ),
         ],
@@ -1153,25 +1177,32 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   Widget _buildResultDuckingChip(String label, double val) {
-    final isSelected = (_currentDuckingVolume - val).abs() < 0.02;
+    final isSelected = (_currentDuckingVolume - val).abs() < 0.04;
+
     return InkWell(
-      onTap: () => setState(() => _currentDuckingVolume = val),
+      onTap: () {
+        setState(() {
+          _currentDuckingVolume = val;
+          widget.settingsService.defaultDuckingVolume = val;
+        });
+      },
       borderRadius: BorderRadius.circular(6),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: isSelected
-              ? Colors.tealAccent.withValues(alpha: 0.25)
+              ? StudioTheme.neonCyan.withValues(alpha: 0.25)
               : const Color(0xFF1E293B),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isSelected ? Colors.tealAccent : Colors.white12,
+            color: isSelected ? StudioTheme.neonCyan : Colors.white12,
+            width: 1,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.tealAccent : Colors.white70,
+            color: isSelected ? Colors.white : Colors.white60,
             fontSize: 10,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),

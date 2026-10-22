@@ -18,6 +18,8 @@ class SettingsService {
   static const String keySubtitleEnabled = 'subtitle_enabled';
   static const String keySubtitleColor = 'subtitle_color';
   static const String keySubtitleFontSize = 'subtitle_font_size';
+  static const String keySelectedBgmTrack = 'selected_bgm_track';
+  static const String keyBgmVolume = 'bgm_volume';
 
   // Default values
   static const String defaultTtsEndpoint = 'https://api.khmervoice.ai/v1/tts';
@@ -123,7 +125,7 @@ class SettingsService {
   set voiceSreymomId(String val) => _prefs.setString(keyVoiceSreymomId, val);
 
   double get defaultDuckingVolume =>
-      _prefs.getDouble(keyDefaultDucking) ?? 0.60; // Default 60%: CapCut Auto-Ducking
+      _prefs.getDouble(keyDefaultDucking) ?? 0.80; // Default 80% for rich cinematic BGM/SFX
   set defaultDuckingVolume(double val) =>
       _prefs.setDouble(keyDefaultDucking, val);
 
@@ -176,4 +178,14 @@ class SettingsService {
       _prefs.getString(keySubtitleFontSize) ?? 'small';
   set subtitleFontSize(String val) =>
       _prefs.setString(keySubtitleFontSize, val);
+
+  /// Selected background music track ID for movie recaps ('original', 'action', 'suspense', 'none', etc.)
+  String get selectedBgmTrack =>
+      _prefs.getString(keySelectedBgmTrack) ?? 'original';
+  set selectedBgmTrack(String val) =>
+      _prefs.setString(keySelectedBgmTrack, val);
+
+  /// Background music volume (0.0 to 1.0, default 0.70 for punchy cinematic recap music)
+  double get bgmVolume => _prefs.getDouble(keyBgmVolume) ?? 0.70;
+  set bgmVolume(double val) => _prefs.setDouble(keyBgmVolume, val);
 }

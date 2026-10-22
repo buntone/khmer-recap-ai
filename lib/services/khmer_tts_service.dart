@@ -76,7 +76,7 @@ class KhmerTtsService {
   Future<String> synthesizeKhmerSpeech({
     required String text,
     required KhmerVoice voice,
-    double speed = 1.05,
+    double speed = 1.02,
     double pitch = 1.0,
     double totalDurationSeconds = 60.0,
     double syncDelaySeconds = 0.0,
@@ -95,21 +95,30 @@ class KhmerTtsService {
     final List<List<int>?> rawBytesList = List.filled(totalSegments, null);
     int completedTts = 0;
 
-    // 1. Parallel TTS Synthesis with concurrency pool of 3 for blazing-fast generation
+    // 1. Parallel TTS Synthesis with concurrency pool of 2 for rock-solid stability on mobile connections
     Future<void> synthesizeWorker(List<int> indices) async {
       for (final idx in indices) {
         final seg = segments[idx];
-        try {
-          final bytes = await _callTtsEndpoint(
-            text: seg.text,
-            voiceId: seg.voiceId,
-            speed: speed,
-            pitch: pitch,
-          );
-          rawBytesList[idx] = bytes;
-        } catch (e) {
-          debugPrint('TTS segment $idx failed: $e');
+        List<int>? bytes;
+        for (int attempt = 0; attempt < 3; attempt++) {
+          try {
+            bytes = await _callTtsEndpoint(
+              text: seg.text,
+              voiceId: seg.voiceId,
+              speed: speed,
+              pitch: pitch,
+            );
+            if (bytes.isNotEmpty && bytes.length > 80) {
+              break;
+            }
+          } catch (e) {
+            debugPrint('TTS segment $idx attempt $attempt note: $e');
+            if (attempt < 2) {
+              await Future.delayed(Duration(milliseconds: 250 * (attempt + 1)));
+            }
+          }
         }
+        rawBytesList[idx] = (bytes != null && bytes.length > 80) ? bytes : null;
         completedTts++;
         onProgress?.call(
           (completedTts / totalSegments) * 0.7,
@@ -119,7 +128,7 @@ class KhmerTtsService {
       }
     }
 
-    const concurrency = 3;
+    const concurrency = 2; // Concurrency 2 avoids WebSocket drops on mobile connections
     final workerBuckets = List.generate(concurrency, (_) => <int>[]);
     for (int i = 0; i < totalSegments; i++) {
       workerBuckets[i % concurrency].add(i);
@@ -127,10 +136,26 @@ class KhmerTtsService {
     await Future.wait(
       List.generate(workerBuckets.length, (bIdx) async {
         if (workerBuckets[bIdx].isEmpty) return;
-        if (bIdx > 0) await Future.delayed(Duration(milliseconds: 30 * bIdx));
+        if (bIdx > 0) await Future.delayed(Duration(milliseconds: 100 * bIdx));
         await synthesizeWorker(workerBuckets[bIdx]);
       }),
     );
+
+    // 1.5. Safety Net: Emergency Rescue Pass for any segment that may have timed out
+    for (int i = 0; i < totalSegments; i++) {
+      if (rawBytesList[i] == null || rawBytesList[i]!.length <= 80) {
+        final seg = segments[i];
+        debugPrint('Emergency rescue pass for segment $i: "${seg.text}"');
+        try {
+          final rescueBytes = await _synthesizeGoogleKhmerChunk(seg.text);
+          if (rescueBytes != null && rescueBytes.length > 80) {
+            rawBytesList[i] = rescueBytes;
+          }
+        } catch (e) {
+          debugPrint('Emergency rescue segment $i error: $e');
+        }
+      }
+    }
 
     // Map chunk files by their EXACT segment index to prevent ANY index desynchronization!
     final Map<int, File> chunkFilesMap = {};
@@ -193,20 +218,13 @@ class KhmerTtsService {
 
       File finalChunkFile = actualFile;
 
-      if (availableWindow > 0.3 && dur > (availableWindow - 0.12)) {
+      if (availableWindow > 0.4 && dur > (availableWindow - 0.10)) {
+        // Text is long: automatically increase speed to fit the scene cleanly and clearly!
         final targetDuration =
             (availableWindow - 0.15).clamp(0.35, availableWindow - 0.05);
-        double speedRatio = dur / targetDuration;
-        speedRatio = speedRatio.clamp(1.05, 2.0);
+        final speedRatio = (dur / targetDuration).clamp(1.02, 1.40);
 
-        String tempoFilter;
-        if (speedRatio <= 2.0) {
-          tempoFilter = 'atempo=${speedRatio.toStringAsFixed(2)}';
-        } else {
-          tempoFilter =
-              'atempo=1.5,atempo=${(speedRatio / 1.5).toStringAsFixed(2)}';
-        }
-
+        final tempoFilter = 'atempo=${speedRatio.toStringAsFixed(2)}';
         final tempoFile = File('${tempDir.path}/tempo_${timestamp}_$i.wav');
         final tempoCmd =
             '-y -threads 0 -i "${actualFile.path.replaceAll(r'\', '/')}" -filter:a "$tempoFilter" -ar 24000 -ac 1 "${tempoFile.path.replaceAll(r'\', '/')}"';
@@ -254,7 +272,28 @@ class KhmerTtsService {
       final chunkPcm = _extractPcmData(chunkRawBytes);
       if (chunkPcm == null || chunkPcm.isEmpty) continue;
 
-      final chunkSampleCount = chunkPcm.length ~/ bytesPerSample;
+      // Trim any initial digital silence/padding added by TTS engine (typically 100-250ms)
+      // so speech starts on the exact millisecond the character opens their mouth!
+      int leadTrimSamples = 0;
+      final totalRawSamples = chunkPcm.length ~/ bytesPerSample;
+      final rawBd = ByteData.view(
+          chunkPcm.buffer, chunkPcm.offsetInBytes, chunkPcm.lengthInBytes);
+      final maxScan = (sampleRate * 0.35).round(); // scan up to 350ms
+      for (int s = 0; s < totalRawSamples && s < maxScan; s++) {
+        final val = rawBd.getInt16(s * bytesPerSample, Endian.little).abs();
+        if (val > 350) {
+          // Found start of audible phoneme! Leave 5ms (120 samples) pre-roll for smooth breath attack
+          leadTrimSamples = (s > 120) ? s - 120 : 0;
+          break;
+        }
+      }
+
+      final activePcm = (leadTrimSamples > 0 &&
+              leadTrimSamples * bytesPerSample < chunkPcm.length)
+          ? chunkPcm.sublist(leadTrimSamples * bytesPerSample)
+          : chunkPcm;
+
+      final chunkSampleCount = activePcm.length ~/ bytesPerSample;
       if (chunkSampleCount <= 0) continue;
 
       final targetStart = (seg.startSeconds + syncDelaySeconds)
@@ -272,7 +311,7 @@ class KhmerTtsService {
       final bytesToCopy = copySamples * bytesPerSample;
 
       // Create a mutable copy of the PCM segment to apply smooth anti-click micro-fades
-      final pcmSlice = Uint8List.fromList(chunkPcm.sublist(0, bytesToCopy));
+      final pcmSlice = Uint8List.fromList(activePcm.sublist(0, bytesToCopy));
       final bdSlice = ByteData.view(pcmSlice.buffer);
 
       // 1. Smooth 5ms micro-fade IN (120 samples at 24kHz) to prevent initial step pop/click
@@ -830,9 +869,37 @@ class KhmerTtsService {
       } catch (_) {}
     }
 
-    // 3. Fallback: Ultra-fast Google Khmer TTS (200-300ms)
+    // 3. Fallback: Ultra-reliable Google Khmer Neural TTS with automatic chunking for long text
     try {
-      final encodedText = Uri.encodeComponent(cleanText);
+      if (cleanText.length <= 140) {
+        final gBytes = await _synthesizeGoogleKhmerChunk(cleanText);
+        if (gBytes != null && gBytes.isNotEmpty) return gBytes;
+      } else {
+        final chunks = _splitKhmerTextIntoChunks(cleanText, 120);
+        final combined = BytesBuilder(copy: false);
+        for (final c in chunks) {
+          final b = await _synthesizeGoogleKhmerChunk(c);
+          if (b != null && b.isNotEmpty) combined.add(b);
+        }
+        final result = combined.toBytes();
+        if (result.length > 100) return result;
+      }
+    } catch (e) {
+      debugPrint('Google Khmer TTS fallback error: $e');
+    }
+
+    throw Exception(
+        'មិនអាចទាញយកសំឡេងអានជាភាសាខ្មែរបានឡើយ (Failed to synthesize Khmer speech).');
+  }
+
+  /// Synthesizes a single chunk using Google Translate TTS endpoints with 6s timeout
+  static Future<List<int>?> _synthesizeGoogleKhmerChunk(String chunk) async {
+    final clean = chunk.trim();
+    if (clean.isEmpty) return null;
+    final encodedText = Uri.encodeComponent(clean);
+
+    // Primary Google Translate TTS (gtx client)
+    try {
       final gTtsUri = Uri.parse(
         'https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=km&q=$encodedText',
       );
@@ -840,18 +907,16 @@ class KhmerTtsService {
         gTtsUri,
         headers: {
           'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         },
-      ).timeout(const Duration(milliseconds: 2500));
-
+      ).timeout(const Duration(seconds: 6));
       if (gResponse.statusCode == 200 && gResponse.bodyBytes.length > 80) {
         return gResponse.bodyBytes;
       }
     } catch (_) {}
 
-    // Fallback tw-ob client
+    // Fallback Google Translate TTS (tw-ob client)
     try {
-      final encodedText = Uri.encodeComponent(cleanText);
       final fallbackUri = Uri.parse(
         'https://translate.google.com/translate_tts?ie=UTF-8&tl=km&client=tw-ob&q=$encodedText',
       );
@@ -859,15 +924,46 @@ class KhmerTtsService {
         fallbackUri,
         headers: {
           'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         },
-      ).timeout(const Duration(milliseconds: 2500));
+      ).timeout(const Duration(seconds: 6));
       if (fallbackRes.statusCode == 200 && fallbackRes.bodyBytes.length > 80) {
         return fallbackRes.bodyBytes;
       }
     } catch (_) {}
 
-    throw Exception(
-        'មិនអាចទាញយកសំឡេងអានជាភាសាខ្មែរបានឡើយ (Failed to synthesize Khmer speech).');
+    return null;
+  }
+
+  /// Splits long Khmer text into natural clauses based on punctuation and spaces
+  static List<String> _splitKhmerTextIntoChunks(String text, int maxChars) {
+    if (text.length <= maxChars) return [text];
+    final chunks = <String>[];
+    final sentences = text.split(RegExp(r'(?<=[។!?\n])\s*'));
+    String current = '';
+    for (final s in sentences) {
+      if ((current.length + s.length) <= maxChars) {
+        current += (current.isEmpty ? '' : ' ') + s;
+      } else {
+        if (current.isNotEmpty) chunks.add(current);
+        if (s.length <= maxChars) {
+          current = s;
+        } else {
+          // Subdivide long sentence by spaces or comma
+          final words = s.split(RegExp(r'\s+'));
+          current = '';
+          for (final w in words) {
+            if ((current.length + w.length) <= maxChars) {
+              current += (current.isEmpty ? '' : ' ') + w;
+            } else {
+              if (current.isNotEmpty) chunks.add(current);
+              current = w;
+            }
+          }
+        }
+      }
+    }
+    if (current.isNotEmpty) chunks.add(current);
+    return chunks.isNotEmpty ? chunks : [text];
   }
 }

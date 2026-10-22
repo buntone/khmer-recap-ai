@@ -806,7 +806,7 @@ class EdgeTtsV2 {
 
     try {
       final result =
-          await completer.future.timeout(const Duration(seconds: 5));
+          await completer.future.timeout(const Duration(seconds: 12));
       return result;
     } on TimeoutException {
       final partial = builder.toBytes();
