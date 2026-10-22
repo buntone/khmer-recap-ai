@@ -222,8 +222,8 @@ class GeminiRecapService {
             final chineseCount =
                 RegExp(r'[\u4E00-\u9FFF]').allMatches(text).length;
 
-            // If Gemini output contains Chinese or has insufficient Khmer characters:
-            // Trigger instant second-pass text-to-text translation!
+            // If Gemini output contains ANY Chinese or has insufficient Khmer characters:
+            // Trigger multi-model/multi-key second-pass text-to-text translation!
             if (chineseCount > 0 || khmerCount < 20) {
               final translated = await _translateChineseOrRawScriptToKhmer(
                 rawText: text,
@@ -232,13 +232,15 @@ class GeminiRecapService {
               );
               final transKhmerCount =
                   RegExp(r'[\u1780-\u17B3]').allMatches(translated).length;
-              if (translated.isNotEmpty && transKhmerCount >= 20) {
+              final transChineseCount =
+                  RegExp(r'[\u4E00-\u9FFF]').allMatches(translated).length;
+              if (translated.isNotEmpty &&
+                  transKhmerCount >= 20 &&
+                  transChineseCount == 0) {
                 rawScript = translated;
                 break;
               }
-            }
-
-            if (khmerCount >= 20) {
+            } else if (khmerCount >= 20 && chineseCount == 0) {
               rawScript = text;
               break;
             }
@@ -257,6 +259,13 @@ class GeminiRecapService {
 
     if (rawScript.isEmpty) {
       if (lastError != null) {
+        final errStr = lastError.toString().toLowerCase();
+        if (errStr.contains('429') ||
+            errStr.contains('resource_exhausted') ||
+            errStr.contains('quota')) {
+          throw Exception(
+              'Gemini API Key របស់អ្នកបានដល់កម្រិតកំណត់ (Google Gemini Quota Limit 429)។ សូមចូលទៅកាន់ Settings (⚙️) រួចបញ្ចូល API Key បន្ថែម (Google AI Studio Key) ដើម្បីដំណើរការបន្ត!');
+        }
         throw Exception('Gemini AI បរាជ័យក្នុងការបកប្រែ: $lastError');
       }
       throw Exception(
@@ -272,17 +281,28 @@ class GeminiRecapService {
     required String modelName,
     required String apiKey,
   }) async {
-    try {
-      final model = GenerativeModel(
-        model: modelName,
-        apiKey: apiKey,
-        generationConfig: GenerationConfig(
-          temperature: 0.1,
-          maxOutputTokens: 8192,
-        ),
-      );
+    final candidateModels = [
+      modelName,
+      'gemini-1.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash-8b',
+    ];
 
-      final translationPrompt = '''
+    final keys = [apiKey, ...apiKeys.where((k) => k != apiKey)];
+
+    for (final k in keys) {
+      for (final m in candidateModels) {
+        try {
+          final model = GenerativeModel(
+            model: m,
+            apiKey: k,
+            generationConfig: GenerationConfig(
+              temperature: 0.1,
+              maxOutputTokens: 8192,
+            ),
+          );
+
+          final translationPrompt = '''
 You are an expert Chinese-to-Khmer film dubbing translator.
 The following script was extracted from a Chinese video, but it contains Chinese characters or needs translation into natural Khmer narration.
 
@@ -299,12 +319,18 @@ $rawText
 OUTPUT (Plain text only, 100% Khmer script, absolutely zero Chinese):
 ''';
 
-      final resp =
-          await model.generateContent([Content.text(translationPrompt)]);
-      return resp.text?.trim() ?? '';
-    } catch (_) {
-      return '';
+          final resp =
+              await model.generateContent([Content.text(translationPrompt)]);
+          final out = resp.text?.trim() ?? '';
+          final chCount = RegExp(r'[\u4E00-\u9FFF]').allMatches(out).length;
+          final khCount = RegExp(r'[\u1780-\u17B3]').allMatches(out).length;
+          if (out.isNotEmpty && khCount >= 20 && chCount == 0) {
+            return out;
+          }
+        } catch (_) {}
+      }
     }
+    return '';
   }
 
   /// Parses response into formatted script lines [MM:SS] [ប្រុស]: Text
@@ -573,7 +599,12 @@ OUTPUT (Plain text only, 100% Khmer script, absolutely zero Chinese):
               '')
           .trim();
 
-      if (clean.isNotEmpty && RegExp(r'[\u1780-\u17FF]').hasMatch(clean)) {
+      if (clean.isNotEmpty &&
+          clean != 'ប្រុស' &&
+          clean != 'ស្រី' &&
+          clean != 'តួប្រុស' &&
+          clean != 'តួស្រី' &&
+          RegExp(r'[\u1780-\u17B3]').allMatches(clean).length >= 3) {
         final timeTag = pendingTimeTag ?? '[00:01]';
         pendingTimeTag = null;
         buffer.writeln('$timeTag $speakerTag $clean');
@@ -584,11 +615,15 @@ OUTPUT (Plain text only, 100% Khmer script, absolutely zero Chinese):
     if (result.isNotEmpty) return result;
 
     final khmerCount = RegExp(r'[\u1780-\u17B3]').allMatches(rawText).length;
-    if (khmerCount < 10) {
+    final chineseCount = RegExp(r'[\u4E00-\u9FFF]').allMatches(rawText).length;
+    if (khmerCount < 10 || chineseCount > 0) {
       throw Exception(
           'Gemini មិនបានបកប្រែជាភាសាខ្មែរឡើយ (គ្មានអត្ថបទជាភាសាខ្មែរ)។ សូមចុចបង្កើតវីដេអូសម្រាយរឿងម្ដងទៀត។');
     }
 
-    return rawText.replaceAll(RegExp(r'["{}\[\]]'), '').trim();
+    return rawText
+        .replaceAll(RegExp(r'[\u4E00-\u9FFF]'), '')
+        .replaceAll(RegExp(r'["{}\[\]]'), '')
+        .trim();
   }
 }

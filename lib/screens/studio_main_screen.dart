@@ -224,6 +224,9 @@ class _StudioMainScreenState extends State<StudioMainScreen> {
     });
 
     try {
+      // Clean up stale temp files from previous runs to free memory & storage
+      await _ffmpegService.cleanTempFiles();
+
       // Stage 1: Prepare lightweight media for Gemini Multimodal Analysis
       final mediaPath =
           await _ffmpegService.prepareMediaForGemini(_selectedVideoPath!);
@@ -322,6 +325,9 @@ class _StudioMainScreenState extends State<StudioMainScreen> {
       } catch (e) {
         debugPrint('Auto-save warning: $e');
       }
+
+      // Clean temporary visual/audio files to free device storage
+      _ffmpegService.cleanTempFiles();
 
       // Re-load dubbed video in preview player
       await _loadVideo(dubbedVideoPath);

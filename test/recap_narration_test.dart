@@ -269,5 +269,28 @@ void main() {
         chineseScript, KhmerVoice.autoDialogue);
     expect(segments.isEmpty, isTrue);
   });
+
+  test('Orphan timestamps and speaker tags without real dialogue are ignored', () {
+    final tts = KhmerTtsService(
+      endpoint: '',
+      apiToken: '',
+      prasithVoiceId: 'male_prasith',
+      sreymomVoiceId: 'female_sreymom',
+    );
+
+    const orphanScript = '''
+0001 ប្រុស
+0002 ស្រី
+[00:01] [ប្រុស]:
+[00:04] [ស្រី]:
+[00:07] [ប្រុស]: ជំរាបសួរលោកពូ ថ្ងៃនេះសុខសប្បាយទេ?
+''';
+
+    final segments = tts.parseDialogueSegmentsForTesting(
+        orphanScript, KhmerVoice.autoDialogue);
+    expect(segments.length, 1);
+    expect(segments[0].text, 'ជំរាបសួរលោកពូ ថ្ងៃនេះសុខសប្បាយទេ?');
+    expect(segments[0].voiceId, 'male_prasith');
+  });
 }
 

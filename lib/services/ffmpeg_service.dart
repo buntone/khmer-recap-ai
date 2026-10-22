@@ -7,6 +7,7 @@ import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit_config.dart';
 import 'package:ffmpeg_kit_flutter_new/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 class VideoMetadata {
@@ -1075,6 +1076,45 @@ class FFmpegService {
       }
     } catch (_) {}
     return null;
+  }
+
+  /// Safely cleans up temporary processing files from previous runs to prevent storage/memory buildup
+  Future<void> cleanTempFiles({bool forceAll = false}) async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      if (!tempDir.existsSync()) return;
+      final now = DateTime.now();
+
+      final entities = tempDir.listSync();
+      for (final entity in entities) {
+        if (entity is File) {
+          final name = p.basename(entity.path);
+          final isOurTemp = name.startsWith('gemini_visual_') ||
+              name.startsWith('gemini_audio_') ||
+              name.startsWith('khmer_voice_') ||
+              name.startsWith('master_timeline_') ||
+              name.startsWith('raw_') ||
+              name.startsWith('norm_') ||
+              name.startsWith('tempo_') ||
+              name.startsWith('wm_') ||
+              name.startsWith('subs_') ||
+              (forceAll && name.startsWith('khmer_recap_output_'));
+
+          if (isOurTemp) {
+            try {
+              final stat = entity.statSync();
+              final age = now.difference(stat.modified);
+              // Clean if older than 3 minutes or forceAll is true
+              if (forceAll || age.inMinutes >= 3) {
+                entity.deleteSync();
+              }
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Temp cleanup note: $e');
+    }
   }
 }
 

@@ -730,7 +730,7 @@ class EdgeTtsV2 {
       },
       compression: CompressionOptions.compressionOff,
       customClient: httpClient,
-    ).timeout(const Duration(seconds: 4));
+    ).timeout(const Duration(seconds: 8));
 
     final timestamp = generateTimestamp();
     final configMsg = 'X-Timestamp:$timestamp\r\n'
@@ -806,7 +806,7 @@ class EdgeTtsV2 {
 
     try {
       final result =
-          await completer.future.timeout(const Duration(seconds: 12));
+          await completer.future.timeout(const Duration(seconds: 16));
       return result;
     } on TimeoutException {
       final partial = builder.toBytes();

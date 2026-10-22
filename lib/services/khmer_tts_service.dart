@@ -382,9 +382,28 @@ class KhmerTtsService {
     final session = await FFmpegKit.execute(mp3Cmd);
     final returnCode = await session.getReturnCode();
 
+    // Fast-cleanup intermediate WAV/MP3 chunks to free device RAM and storage
+    void cleanIntermediateFiles() {
+      try {
+        if (masterWavFile.existsSync()) masterWavFile.deleteSync();
+        for (final f in chunkFilesMap.values) {
+          if (f.existsSync()) f.deleteSync();
+        }
+        for (int idx = 0; idx < totalSegments; idx++) {
+          final r = File('${tempDir.path}/raw_${timestamp}_$idx.mp3');
+          if (r.existsSync()) r.deleteSync();
+          final n = File('${tempDir.path}/norm_${timestamp}_$idx.wav');
+          if (n.existsSync()) n.deleteSync();
+          final t = File('${tempDir.path}/tempo_${timestamp}_$idx.wav');
+          if (t.existsSync()) t.deleteSync();
+        }
+      } catch (_) {}
+    }
+
     if (ReturnCode.isSuccess(returnCode) &&
         await outputFile.exists() &&
         (await outputFile.length()) > 500) {
+      cleanIntermediateFiles();
       return outputFile.path;
     }
 
@@ -398,6 +417,7 @@ class KhmerTtsService {
 
     if (ReturnCode.isSuccess(fallbackReturnCode) &&
         await fallbackOutputFile.exists()) {
+      cleanIntermediateFiles();
       return fallbackOutputFile.path;
     }
 
@@ -512,16 +532,16 @@ class KhmerTtsService {
     if (cleanInput.isEmpty) return [];
 
     // Preprocess text to ensure every speaker tag or timestamp tag begins on a separate line
-    // This prevents male and female dialogues from being accidentally merged into a single line
+    // Only split if preceded by actual punctuation or Khmer text (prevent splitting timestamp brackets)
     final preprocessedText = cleanInput
         .replaceAllMapped(
           RegExp(
-              r'([^\n])\s*(\[\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?(?:\s*(?:-->|[-–])\s*\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)?\])'),
+              r'([។!?\u1780-\u17B3])\s*(\[\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?(?:\s*(?:-->|[-–—~➔>]+)\s*\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)?\])'),
           (m) => '${m[1]}\n${m[2]}',
         )
         .replaceAllMapped(
           RegExp(
-              r'([^\n])\s*(\[?(?:តួ)?(?:ប្រុស|ស្រី|បុរស|នារី|ស្ត្រី|អ្នករៀបរាប់|male|female|man|woman|boy|girl|\b[MF]\b)\]?[:៖])',
+              r'([។!?\u1780-\u17B3])\s*(\[?(?:តួ)?(?:ប្រុស|ស្រី|បុរស|នារី|ស្ត្រី|អ្នករៀបរាប់|male|female|man|woman|boy|girl|\b[MF]\b)\]?[:៖])',
               caseSensitive: false),
           (m) => '${m[1]}\n${m[2]}',
         );
@@ -721,26 +741,49 @@ class KhmerTtsService {
         }
       }
 
-      // Clean text: strip brackets, quotes, leftover colons, embedded timestamps and speaker tags
+      // Clean text: strip brackets, quotes, leftover colons, embedded timestamps, speaker tags, and Chinese characters
       var cleanLine = lineText
           .replaceAll(timePattern, '')
-          .replaceAll(RegExp(r'[\*_]*[\[\(【（<]\s*(?:ក្នុងចិត្ត|គិតក្នុងចិត្ត|内心|心想|独白)\s*[\]\)】）>][\*_]*'), '')
-          .replaceAll(RegExp(r'["{}\[\]【】]'), '')
-          .replaceAll(RegExp(r'^[:៖\-–\s]+'), '')
+          .replaceAll(
+              RegExp(
+                  r'\[?\b\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?(?:\s*(?:-->|[-–—~➔>]+)\s*\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)?\]?'),
+              '')
+          .replaceAll(RegExp(r'^\s*\b\d{1,4}\b\s*'), '')
+          .replaceAll(
+              RegExp(
+                  r'^\s*[\*_]*[\[\(【（<]?(?:(?:តួ)?(?:ប្រុស|ស្រី|បុរស|នារី|ស្ត្រី)|អ្នករៀបរាប់|អ្នកសម្រាយ|សម្រាយ|male|female|man|woman|boy|girl|narrator|\b[MF]\b)[\]\)】）>]*[\*_]*\s*[:៖\-–\s]*',
+                  caseSensitive: false),
+              '')
+          .replaceAll(
+              RegExp(
+                  r'[\*_]*[\[\(【（<]\s*(?:ក្នុងចិត្ត|គិតក្នុងចិត្ត|内心|心想|独白)\s*[\]\)】）>][\*_]*'),
+              '')
+          .replaceAll(RegExp(r'[\u4E00-\u9FFF]'), '') // Strip all Chinese characters
+          .replaceAll(RegExp(r'["{}\[\]【】()（）<>]'), '')
+          .replaceAll(RegExp(r'^[:៖\-–—~➔>#*.\s]+'), '')
           .trim();
 
-      // Eliminate any unwanted "សម្រាយរឿង" / "សម្រាយសាច់រឿង" intro narration prefixes
+      // Eliminate any unwanted "សម្រាយរឿង" / "សម្រាយសាច់រឿង" / "សាច់រឿង" intro narration prefixes
       cleanLine = cleanLine
           .replaceFirst(
               RegExp(
-                  r'^(?:ការសម្រាយរឿង|សម្រាយសាច់រឿង|សម្រាយរឿង|អ្នកសម្រាយរឿង|សម្រាយ)\s*[:៖\-–\s]*',
+                  r'^(?:ការសម្រាយរឿង|សម្រាយសាច់រឿង|សាច់រឿង|សម្រាយរឿង|អ្នកសម្រាយរឿង|សម្រាយ)\s*[:៖\-–\s]*',
                   caseSensitive: false),
               '')
           .trim();
 
-      // Ensure dialogue line has actual Khmer letters (at least 2 Khmer consonants/vowels)
+      // Ensure dialogue line is not just an isolated gender word ("ប្រុស", "ស្រី") or numbers
+      if (cleanLine == 'ប្រុស' ||
+          cleanLine == 'ស្រី' ||
+          cleanLine == 'តួប្រុស' ||
+          cleanLine == 'តួស្រី' ||
+          RegExp(r'^\d+$').hasMatch(cleanLine)) {
+        continue;
+      }
+
+      // Ensure dialogue line has genuine Khmer letters (at least 3 Khmer consonants/vowels)
       if (cleanLine.isNotEmpty &&
-          RegExp(r'[\u1780-\u17B3]').allMatches(cleanLine).length >= 2) {
+          RegExp(r'[\u1780-\u17B3]').allMatches(cleanLine).length >= 3) {
         segments.add(_DialogueSegment(
           startSeconds: startSeconds,
           endSeconds: endSeconds,
@@ -800,22 +843,38 @@ class KhmerTtsService {
     required double speed,
     required double pitch,
   }) async {
-    // Bulletproof sanitization: strip any leftover timestamps and speaker tags so TTS never reads numbers or "ប្រុស/ស្រី"
+    // Bulletproof sanitization: strip all timestamps, isolated digits, speaker tags, and Chinese characters
     var cleanText = text
         .replaceAll(
             RegExp(
-                r'\[?\b\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?(?:\s*(?:-->|[-–])\s*\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)?\]?'),
+                r'\[?\b\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?(?:\s*(?:-->|[-–—~➔>]+)\s*\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)?\]?'),
+            '')
+        .replaceAll(RegExp(r'\b\d{1,4}\b'), '') // Strip isolated numbers like 0001, 0002, 1, 2
+        .replaceAll(
+            RegExp(
+                r'^\s*[\*_]*[\[\(【（<]?(?:(?:តួ)?(?:ប្រុស|ស្រី|បុរស|នារី|ស្ត្រី)|អ្នករៀបរាប់|អ្នកសម្រាយ|សម្រាយ|male|female|man|woman|boy|girl|narrator|\b[MF]\b)[\]\)】）>]*[\*_]*\s*[:៖\-–\s]*',
+                caseSensitive: false),
             '')
         .replaceAll(
             RegExp(
-                r'^\s*[\*_]*[\[\(【（<]?(?:(?:តួ)?(?:ប្រុស|ស្រី|បុរស|នារី|ស្ត្រី)|អ្នករៀបរាប់|male|female|man|woman|boy|girl|narrator|\b[MF]\b)[\]\)】）>]*[\*_]*\s*[:៖\-–\s]*',
-                caseSensitive: false),
+                r'[\*_]*[\[\(【（<]\s*(?:ក្នុងចិត្ត|គិតក្នុងចិត្ត|内心|心想|独白)\s*[\]\)】）>][\*_]*'),
             '')
-        .replaceAll(RegExp(r'["{}\[\]【】]'), '')
-        .replaceAll(RegExp(r'^[:៖\-–\s]+'), '')
+        .replaceAll(RegExp(r'[\u4E00-\u9FFF]'), '') // Strip all Chinese characters
+        .replaceAll(RegExp(r'["{}\[\]【】()（）<>]'), '')
+        .replaceAll(RegExp(r'^[:៖\-–—~➔>#*.\s]+'), '')
         .trim();
 
-    if (cleanText.isEmpty || !RegExp(r'[\u1780-\u17B3]').hasMatch(cleanText)) {
+    // Guard: never read isolated tags or numbers as speech
+    if (cleanText == 'ប្រុស' ||
+        cleanText == 'ស្រី' ||
+        cleanText == 'តួប្រុស' ||
+        cleanText == 'តួស្រី' ||
+        RegExp(r'^\d+$').hasMatch(cleanText)) {
+      return [];
+    }
+
+    if (cleanText.isEmpty ||
+        RegExp(r'[\u1780-\u17B3]').allMatches(cleanText).length < 3) {
       return [];
     }
 
@@ -920,8 +979,30 @@ class KhmerTtsService {
 
   /// Synthesizes a single chunk using Google Translate TTS endpoints with 6s timeout
   static Future<List<int>?> _synthesizeGoogleKhmerChunk(String chunk) async {
-    final clean = chunk.trim();
-    if (clean.isEmpty) return null;
+    var clean = chunk
+        .replaceAll(
+            RegExp(
+                r'\[?\b\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?(?:\s*(?:-->|[-–—~➔>]+)\s*\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)?\]?'),
+            '')
+        .replaceAll(RegExp(r'\b\d{1,4}\b'), '')
+        .replaceAll(
+            RegExp(
+                r'^\s*[\*_]*[\[\(【（<]?(?:(?:តួ)?(?:ប្រុស|ស្រី|បុរស|នារី|ស្ត្រី)|អ្នករៀបរាប់|អ្នកសម្រាយ|សម្រាយ|male|female|man|woman|boy|girl|narrator|\b[MF]\b)[\]\)】）>]*[\*_]*\s*[:៖\-–\s]*',
+                caseSensitive: false),
+            '')
+        .replaceAll(RegExp(r'[\u4E00-\u9FFF]'), '')
+        .replaceAll(RegExp(r'["{}\[\]【】()（）<>]'), '')
+        .replaceAll(RegExp(r'^[:៖\-–—~➔>#*.\s]+'), '')
+        .trim();
+
+    if (clean == 'ប្រុស' ||
+        clean == 'ស្រី' ||
+        clean == 'តួប្រុស' ||
+        clean == 'តួស្រី' ||
+        clean.isEmpty ||
+        RegExp(r'[\u1780-\u17B3]').allMatches(clean).length < 3) {
+      return null;
+    }
     final encodedText = Uri.encodeComponent(clean);
 
     // Primary Google Translate TTS (gtx client)

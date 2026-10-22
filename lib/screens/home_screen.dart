@@ -127,6 +127,9 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
+      // Step 1: Clean up any stale temp files from previous runs to free memory & storage
+      await _ffmpegService.cleanTempFiles();
+
       // Step 2: Extract visual video / audio for Gemini
       final mediaPath =
           await _ffmpegService.prepareMediaForGemini(_selectedVideoPath!);
@@ -227,6 +230,9 @@ class _HomeScreenState extends State<HomeScreen> {
       } catch (e) {
         debugPrint('Auto-save to gallery warning: $e');
       }
+
+      // Clean temporary visual/audio files to free device storage
+      _ffmpegService.cleanTempFiles();
 
       // Pipeline Complete - Navigate to Result Screen
       setState(() {
