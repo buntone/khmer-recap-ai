@@ -43,12 +43,14 @@ class DialogueSegmentItem {
   final double? endSeconds;
   final String voiceId;
   final String text;
+  final bool isInnerMonologue;
 
   DialogueSegmentItem({
     required this.startSeconds,
     this.endSeconds,
     required this.voiceId,
     required this.text,
+    this.isInnerMonologue = false,
   });
 }
 
@@ -218,20 +220,31 @@ class KhmerTtsService {
 
       File finalChunkFile = actualFile;
 
+      // Inner Monologue Filter (សំឡេងរណ្ដំ រងំ បែបគិតក្នុងចិត្ត):
+      // Applies spatial room reverb & subtle warmth so the character sounds as though speaking inside their mind!
+      final filters = <String>[];
+      if (seg.isInnerMonologue) {
+        filters.add(
+            'aecho=0.82:0.75:60|120:0.35|0.22,equalizer=f=350:t=q:w=1:g=2.5,equalizer=f=3200:t=q:w=1:g=-2.0');
+      }
+
       if (availableWindow > 0.4 && dur > (availableWindow - 0.10)) {
         // Text is long: automatically increase speed to fit the scene cleanly and clearly!
         final targetDuration =
             (availableWindow - 0.15).clamp(0.35, availableWindow - 0.05);
         final speedRatio = (dur / targetDuration).clamp(1.02, 1.40);
+        filters.add('atempo=${speedRatio.toStringAsFixed(2)}');
+      }
 
-        final tempoFilter = 'atempo=${speedRatio.toStringAsFixed(2)}';
-        final tempoFile = File('${tempDir.path}/tempo_${timestamp}_$i.wav');
-        final tempoCmd =
-            '-y -threads 0 -i "${actualFile.path.replaceAll(r'\', '/')}" -filter:a "$tempoFilter" -ar 24000 -ac 1 "${tempoFile.path.replaceAll(r'\', '/')}"';
-        final tempoSession = await FFmpegKit.execute(tempoCmd);
-        if (ReturnCode.isSuccess(await tempoSession.getReturnCode()) &&
-            await tempoFile.exists()) {
-          finalChunkFile = tempoFile;
+      if (filters.isNotEmpty) {
+        final combinedFilter = filters.join(',');
+        final fxFile = File('${tempDir.path}/fx_${timestamp}_$i.wav');
+        final fxCmd =
+            '-y -threads 0 -i "${actualFile.path.replaceAll(r'\', '/')}" -filter:a "$combinedFilter" -ar 24000 -ac 1 "${fxFile.path.replaceAll(r'\', '/')}"';
+        final fxSession = await FFmpegKit.execute(fxCmd);
+        if (ReturnCode.isSuccess(await fxSession.getReturnCode()) &&
+            await fxFile.exists()) {
+          finalChunkFile = fxFile;
         }
       }
 
@@ -396,6 +409,8 @@ class KhmerTtsService {
           if (n.existsSync()) n.deleteSync();
           final t = File('${tempDir.path}/tempo_${timestamp}_$idx.wav');
           if (t.existsSync()) t.deleteSync();
+          final fx = File('${tempDir.path}/fx_${timestamp}_$idx.wav');
+          if (fx.existsSync()) fx.deleteSync();
         }
       } catch (_) {}
     }
@@ -741,6 +756,12 @@ class KhmerTtsService {
         }
       }
 
+      // Detect if this line represents character inner thoughts / monologue
+      final bool isInnerMonologue = RegExp(
+        r'(?:[\(\[【（<]?\s*(?:សំឡេងក្នុងចិត្ត|គិតក្នុងចិត្ត|និយាយក្នុងចិត្ត|ក្នុងចិត្ត|内心|心想|独白)\s*[\)\]】）>]?)',
+        caseSensitive: false,
+      ).hasMatch(trimmed);
+
       // Clean text: strip brackets, quotes, leftover colons, embedded timestamps, speaker tags, and Chinese characters
       var cleanLine = lineText
           .replaceAll(timePattern, '')
@@ -756,7 +777,8 @@ class KhmerTtsService {
               '')
           .replaceAll(
               RegExp(
-                  r'[\*_]*[\[\(【（<]\s*(?:ក្នុងចិត្ត|គិតក្នុងចិត្ត|内心|心想|独白)\s*[\]\)】）>][\*_]*'),
+                  r'[\*_]*[\(\[【（<]?\s*(?:សំឡេងក្នុងចិត្ត|គិតក្នុងចិត្ត|និយាយក្នុងចិត្ត|ក្នុងចិត្ត|内心|心想|独白)\s*[\)\]】）>]*[\*_]*',
+                  caseSensitive: false),
               '')
           .replaceAll(RegExp(r'[\u4E00-\u9FFF]'), '') // Strip all Chinese characters
           .replaceAll(RegExp(r'["{}\[\]【】()（）<>]'), '')
@@ -789,6 +811,7 @@ class KhmerTtsService {
           endSeconds: endSeconds,
           voiceId: lineVoiceId,
           text: cleanLine,
+          isInnerMonologue: isInnerMonologue,
         ));
       }
     }
@@ -804,6 +827,7 @@ class KhmerTtsService {
           endSeconds: segments[i + 1].endSeconds,
           voiceId: segments[i + 1].voiceId,
           text: segments[i + 1].text,
+          isInnerMonologue: segments[i + 1].isInnerMonologue,
         );
       }
     }
@@ -857,7 +881,8 @@ class KhmerTtsService {
             '')
         .replaceAll(
             RegExp(
-                r'[\*_]*[\[\(【（<]\s*(?:ក្នុងចិត្ត|គិតក្នុងចិត្ត|内心|心想|独白)\s*[\]\)】）>][\*_]*'),
+                r'[\*_]*[\(\[【（<]?\s*(?:សំឡេងក្នុងចិត្ត|គិតក្នុងចិត្ត|និយាយក្នុងចិត្ត|ក្នុងចិត្ត|内心|心想|独白)\s*[\)\]】）>]*[\*_]*',
+                caseSensitive: false),
             '')
         .replaceAll(RegExp(r'[\u4E00-\u9FFF]'), '') // Strip all Chinese characters
         .replaceAll(RegExp(r'["{}\[\]【】()（）<>]'), '')
@@ -988,6 +1013,11 @@ class KhmerTtsService {
         .replaceAll(
             RegExp(
                 r'^\s*[\*_]*[\[\(【（<]?(?:(?:តួ)?(?:ប្រុស|ស្រី|បុរស|នារី|ស្ត្រី)|អ្នករៀបរាប់|អ្នកសម្រាយ|សម្រាយ|male|female|man|woman|boy|girl|narrator|\b[MF]\b)[\]\)】）>]*[\*_]*\s*[:៖\-–\s]*',
+                caseSensitive: false),
+            '')
+        .replaceAll(
+            RegExp(
+                r'[\*_]*[\(\[【（<]?\s*(?:សំឡេងក្នុងចិត្ត|គិតក្នុងចិត្ត|និយាយក្នុងចិត្ត|ក្នុងចិត្ត|内心|心想|独白)\s*[\)\]】）>]*[\*_]*',
                 caseSensitive: false),
             '')
         .replaceAll(RegExp(r'[\u4E00-\u9FFF]'), '')

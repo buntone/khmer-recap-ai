@@ -292,5 +292,40 @@ void main() {
     expect(segments[0].text, 'ជំរាបសួរលោកពូ ថ្ងៃនេះសុខសប្បាយទេ?');
     expect(segments[0].voiceId, 'male_prasith');
   });
+
+  test('Inner monologue lines are tagged isInnerMonologue and text is stripped of tags', () {
+    final tts = KhmerTtsService(
+      endpoint: '',
+      apiToken: '',
+      prasithVoiceId: 'male_prasith',
+      sreymomVoiceId: 'female_sreymom',
+    );
+
+    const script = '''
+[00:01 - 00:04] [ប្រុស]: បីឆ្នាំមុន នាងត្រូវបានគេបណ្តេញចេញ។
+[00:04 - 00:07] [ស្រី]: (ក្នុងចិត្ត) ថ្ងៃនេះខ្ញុំត្រលប់មកវិញ ដើម្បីទាមទារភាពយុត្តិធម៌!
+[00:07 - 00:10] [ប្រុស]: (គិតក្នុងចិត្ត) ហេតុអ្វីបានជានាងមកទីនេះ?
+[00:10 - 00:13] [ស្រី]: (សំឡេងក្នុងចិត្ត) ខ្ញុំនឹងមិនចុះចាញ់ឡើយ!
+''';
+
+    final segments = tts.parseDialogueSegmentsForTesting(
+        script, KhmerVoice.autoDialogue);
+    expect(segments.length, 4);
+
+    expect(segments[0].isInnerMonologue, isFalse);
+    expect(segments[0].text, 'បីឆ្នាំមុន នាងត្រូវបានគេបណ្តេញចេញ។');
+
+    expect(segments[1].isInnerMonologue, isTrue);
+    expect(segments[1].text, 'ថ្ងៃនេះខ្ញុំត្រលប់មកវិញ ដើម្បីទាមទារភាពយុត្តិធម៌!');
+    expect(segments[1].text.contains('ក្នុងចិត្ត'), isFalse);
+
+    expect(segments[2].isInnerMonologue, isTrue);
+    expect(segments[2].text, 'ហេតុអ្វីបានជានាងមកទីនេះ?');
+    expect(segments[2].text.contains('គិតក្នុងចិត្ត'), isFalse);
+
+    expect(segments[3].isInnerMonologue, isTrue);
+    expect(segments[3].text, 'ខ្ញុំនឹងមិនចុះចាញ់ឡើយ!');
+    expect(segments[3].text.contains('សំឡេងក្នុងចិត្ត'), isFalse);
+  });
 }
 

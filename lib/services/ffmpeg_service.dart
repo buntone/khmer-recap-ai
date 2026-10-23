@@ -1096,6 +1096,7 @@ class FFmpegService {
               name.startsWith('raw_') ||
               name.startsWith('norm_') ||
               name.startsWith('tempo_') ||
+              name.startsWith('fx_') ||
               name.startsWith('wm_') ||
               name.startsWith('subs_') ||
               (forceAll && name.startsWith('khmer_recap_output_'));
