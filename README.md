@@ -15,11 +15,15 @@
 
 2. **4-Stage Real-Time Pipeline**:
    - **Stage 1: Analyzing Video (កំពុងវិភាគវីដេអូ)** — Probes resolution/duration and extracts audio track for lightweight upload.
-   - **Stage 2: Writing Khmer Script (កំពុងសរសេរអត្ថបទសម្រាយ)** — Gemini 1.5 Flash generates storytelling narration with engaging, smooth phrasing (រៀបរាប់ដំណើររឿងបែបសម្រាយរឿងកុន មិនរឹង មិនកកស្ទះ).
-   - **Stage 3: Generating Khmer Voice (កំពុងបំប្លែងសំឡេង)** — Khmer TTS engine streams natural .mp3 narration with custom voice IDs for Prasith & Sreymom.
-   - **Stage 4: Merging Audio & Video (កំពុងបញ្ចូលសំឡេងក្នុងវីដេអូ)** — FFmpeg mixes the Khmer narration at prominent level while ducking the Chinese audio in background.
+   - **Stage 2: Writing Khmer Script (កំពុងសរសេរអត្ថបទសម្រាយ)** — Gemini 1.5 Flash generates storytelling narration with engaging, smooth phrasing (រៀបរាប់ដំណើររឿងបែបសម្រាយរឿងកុន មិនរឹង មិនកកស្ទះ) with 100% Khmer translation guarantee and API quota multi-key failover.
+   - **Stage 3: Generating Khmer Voice (កំពុងបំប្លែងសំឡេង)** — Multi-speaker Khmer TTS with Auto-Dialogue switching (Prasith & Sreymom), smart digit/tag suppression, and cinematic inner monologue reverb/echo effect (`aecho`).
+   - **Stage 4: Merging Audio & Video (កំពុងបញ្ចូលសំឡេងក្នុងវីដេអូ)** — FFmpeg hardware-accelerated sidechain ducking, auto-compression, and automated temporary file cleanup (`cleanTempFiles`).
 
-3. **Review & Post-Production Studio**:
+3. **Cinematic Inner Monologue Audio Effect (សំឡេងក្នុងចិត្ត)**:
+   - Recognizes thought/monologue tags like `(ក្នុងចិត្ត)`, `(សំឡេងក្នុងចិត្ត)`, `[គិតក្នុងចិត្ត]` and strips them completely from spoken audio.
+   - Automatically applies spatial reverb & echo (`aecho` filter + acoustic EQ) so the voice sounds like an authentic character's inner mental voice.
+
+4. **Review & Post-Production Studio**:
    - In-app preview player with instant audio-video sync.
    - Collapsible & editable Khmer script: make quick edits and press **🔄 Re-generate Voice & Mux**.
    - One-tap actions:
